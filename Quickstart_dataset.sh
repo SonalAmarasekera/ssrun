@@ -10,7 +10,7 @@ pip install -r LibriMix/requirements.txt
 pip install descript-audio-codec
 pip install flash-linear-attention
 pip install "mir_eval>=0.7"
-sudo apt install sox libsox-fmt-all
+sudo apt install sox libsox-fmt-all -y
 
 # Moving around files
 mv generate_librimix_clean16k_2spk.sh LibriMix/
