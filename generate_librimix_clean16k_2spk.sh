@@ -29,7 +29,7 @@ rm -rf "$outdir/Libri2Mix"
 mv dataset/LibriSpeech/LibriSpeech/* dataset/LibriSpeech/
 
 
-python "$repo_root/scripts/create_librimix_from_metadata_new.py" \
+python3 "$repo_root/scripts/create_librimix_from_metadata_new.py" \
        --librispeech_dir "$librispeech_root" \
        --metadata_dir "$repo_root/metadata/Libri2Mix" \
        --librimix_outdir "$outdir" \
