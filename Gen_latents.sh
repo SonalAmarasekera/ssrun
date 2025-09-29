@@ -3,7 +3,7 @@
 chmod +x cache_latents_working.py
 
 # Generate Latents
-python cache_latents_working.py --csv train.csv --out_dir /content/latents/train
+python cache_latents_working.py --csv train100.csv --out_dir /content/latents/train
 
 python cache_latents_working.py --csv dev.csv --out_dir content/latents/dev
 
