@@ -31,8 +31,8 @@ mkdir dataset
 chmod +x make_csv.py
 
 # TRAIN_SET (100 h subset)
-python3 make_csv.py --root "dataset/Libri2Mix/wav16k/min/train-100" --out ~/thesis1/train.csv
+python3 make_csv.py --root "dataset/Libri2Mix/wav16k/min/train-100" --out /content/thesis1/train100.csv
 # DEV_SET
-python3 make_csv.py --root "dataset/Libri2Mix/wav16k/min/dev" --out ~/thesis1/dev.csv
+python3 make_csv.py --root "dataset/Libri2Mix/wav16k/min/dev" --out /content/thesis1/dev.csv
 # TEST_SET
-python3 make_csv.py --root "dataset/Libri2Mix/wav16k/min/test" --out ~/thesis1/test.csv
+python3 make_csv.py --root "dataset/Libri2Mix/wav16k/min/test" --out /content/thesis1/test.csv
