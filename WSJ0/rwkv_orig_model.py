@@ -69,10 +69,15 @@ if 'x070' in os.environ["RWKV_MY_TESTING"]:
             torch.ops.wind_backstepping.backward(w,q,k,v,z,b, dy,s,sa, dw,dq,dk,dv,dz,db)
             return dw,dq,dk,dv,dz,db
 
-    def RUN_CUDA_RWKV7g(q,w,k,v,a,b):
-        B,T,HC = q.shape
-        q,w,k,v,a,b = [i.view(B,T,HC//64,64) for i in [q,w,k,v,a,b]]
-        return WindBackstepping.apply(w,q,k,v,a,b).view(B,T,HC)
+    def RUN_CUDA_RWKV7g(q, w, k, v, a, b):
+        assert q.is_cuda and w.is_cuda and k.is_cuda and v.is_cuda and a.is_cuda and b.is_cuda
+        want = torch.bfloat16
+        q,w,k,v,a,b = [t.to(want).contiguous() for t in (q,w,k,v,a,b)]
+        B, T, HC = q.shape
+        assert HC % 64 == 0, f"HC={HC} not divisible by 64"
+        q,w,k,v,a,b = [i.view(B, T, HC//64, 64) for i in (q,w,k,v,a,b)]
+        return WindBackstepping.apply(w, q, k, v, a, b).view(B, T, HC)
+
 
 elif 'x060' in os.environ["RWKV_MY_TESTING"]:
     if os.environ["RWKV_TRAIN_TYPE"] == 'states':
