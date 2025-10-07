@@ -7,15 +7,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# --- RWKV v7 (x070) CUDA JIT setup: set BEFORE importing anything from rwkv_orig_model ---
-import os
-os.environ.setdefault("RWKV_JIT_ON", "1")         # enable JIT build of CUDA kernel
-os.environ.setdefault("RWKV_CUDA_ON", "1")        # force CUDA path
-os.environ.setdefault("RWKV_MY_TESTING", "x070")  # choose v7 TimeMix/ChannelMix
-os.environ.setdefault("RWKV_FLOAT_MODE", "bf16")  # v7 kernels prefer bf16
-os.environ.setdefault("RWKV_HEAD_SIZE_A", "64")   # must match your config's head_size_a
-# -----------------------------------------------------------------------------------------
-
 # Import official RWKV-v7 components from the author's file
 from rwkv_orig_model import RWKV_Tmix_x070, RWKV_CMix_x070
 
