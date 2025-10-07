@@ -70,7 +70,7 @@ if 'x070' in os.environ["RWKV_MY_TESTING"]:
             return dw,dq,dk,dv,dz,db
 
     def RUN_CUDA_RWKV7g(q, w, k, v, a, b):
-        assert q.is_cuda and w.is_cuda and k.is_cuda and v.is_cuda and a.is_cuda and b.is_cuda
+        assert q.is_cuda and w.is_cuda and k.is_cuda and v.is_cuda and a.is_cuda and b.is_cuda, "all CUDA"
         want = torch.bfloat16
         q,w,k,v,a,b = [t.to(want).contiguous() for t in (q,w,k,v,a,b)]
         B, T, HC = q.shape
