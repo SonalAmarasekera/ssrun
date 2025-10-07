@@ -86,9 +86,9 @@ class BiV7Core(nn.Module):
                 return torch.flip(xb, dims=[1])
 
         xf = self.fwd(x)
-        xb = torch.flip(x, dims=[1])
+        xb = torch.flip(x, dims=[1]).contiguous()
         xb = self.bwd(xb)
-        xb = torch.flip(xb, dims=[1])
+        xb = torch.flip(xb, dims=[1]).contiguous()
         return 0.5 * (xf + xb)
 
 # ----------------------- Separator -----------------------
