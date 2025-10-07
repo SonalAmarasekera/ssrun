@@ -165,6 +165,9 @@ class RWKVv7Separator(nn.Module):
             x = x.to(torch.bfloat16)
         
         x = x.contiguous()  # important for the CUDA kernel
+
+        HC = x.shape[-1]
+        assert (HC % self.cfg.head_size_a) == 0, f"[pre-core] HC={HC} must be divisible by head_size_a={self.cfg.head_size_a}"
         
         h = self.core(x)
 
