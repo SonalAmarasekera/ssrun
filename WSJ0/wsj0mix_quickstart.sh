@@ -10,7 +10,7 @@ pip install kagglehub
 python wsj0mix_kagglehub.py
 
 # Move the data files to accessible space
-mv /root/.cache/kagglehub/datasets/sonishmaharjan555/wsj0-2mix/versions/2 .
+mv /root/.cache/kagglehub/datasets/sonishmaharjan555/wsj0-2mix/versions/2 /content/
 
 cd pywsj0-mix/
 
