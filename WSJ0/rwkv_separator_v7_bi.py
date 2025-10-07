@@ -7,6 +7,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# --- RWKV env defaults (must be set BEFORE importing rwkv_orig_model) ---
+import os
+os.environ.setdefault("RWKV_JIT_ON", "0")        # avoid KeyError at import time
+os.environ.setdefault("RWKV_MY_TESTING", "x070") # enable v7 path
+os.environ.setdefault("RWKV_FLOAT_MODE", "bf16") # v7 kernels prefer bf16
+os.environ.setdefault("RWKV_HEAD_SIZE_A", "64")  # sane default; keep consistent with config
+# ------------------------------------------------------------------------
+
 # Import official RWKV-v7 components from the author's file
 from rwkv_orig_model import RWKV_Tmix_x070, RWKV_CMix_x070
 
