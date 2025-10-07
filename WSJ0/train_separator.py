@@ -3,6 +3,15 @@ from pathlib import Path
 import os, math, time, json, random
 from dataclasses import dataclass, asdict
 
+# ---- RWKV v7 CUDA JIT: must be set BEFORE importing rwkv_orig_model ----
+import os
+os.environ.setdefault("RWKV_JIT_ON", "1")         # build the CUDA kernel at import
+os.environ.setdefault("RWKV_CUDA_ON", "1")        # ensure CUDA path
+os.environ.setdefault("RWKV_MY_TESTING", "x070")  # select v7 TimeMix/ChannelMix
+os.environ.setdefault("RWKV_FLOAT_MODE", "bf16")  # v7 prefers bf16 activations
+os.environ.setdefault("RWKV_HEAD_SIZE_A", "64")   # keep in sync with your config (head_size_a)
+# ------------------------------------------------------------------------
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -19,7 +28,7 @@ class HParams:
     train_root: str = "/content/latents/train"
     val_root:   str = "/content/latents/dev"
     batch_size: int = 8
-    num_workers: int = 4
+    num_workers: int = 2
     pin_memory: bool = True
     # segmenting (crop to fixed seconds during train for speed)
     seg_seconds: float = 6.0   # cropped length in seconds worth of latents (approx by fps)
