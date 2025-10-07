@@ -127,6 +127,9 @@ class RWKVv7Separator(nn.Module):
         self.core = BiV7Core(v7args, dir_drop_p=cfg.dir_drop_p)
         self.up = nn.Linear(H, C)
 
+        if self.cfg.enforce_bf16 and torch.cuda.is_available():
+            self.core = self.core.to(torch.bfloat16)  # cast ALL v7 blocks (lns, linears) to bf16
+
         # Heads
         head_hidden = max(64, C)
         self.head_r1 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), nn.GELU(), nn.Linear(head_hidden, C))
@@ -150,6 +153,11 @@ class RWKVv7Separator(nn.Module):
         if self.cfg.enforce_bf16 and z_mix.device.type == "cuda":
             x = x.to(torch.bfloat16)
 
+        x = self.down(z_mix)
+        if self.cfg.enforce_bf16 and z_mix.device.type == "cuda":
+            x = x.to(torch.bfloat16)
+        x = x.contiguous()  # important for the CUDA kernel
+        
         h = self.core(x)
 
         if h.dtype != z_mix.dtype:
