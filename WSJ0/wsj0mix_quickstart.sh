@@ -5,6 +5,7 @@ git clone https://github.com/mpariente/pywsj0-mix.git
 
 # Install kagglehub
 pip install kagglehub
+pip install ninja
 
 # Get the root files from Kagglehub
 python wsj0mix_kagglehub.py
