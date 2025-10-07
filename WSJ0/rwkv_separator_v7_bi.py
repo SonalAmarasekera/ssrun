@@ -50,9 +50,18 @@ class V7Layer(nn.Module):
 
     def forward(self, x: torch.Tensor, v_first: Optional[torch.Tensor]) -> (torch.Tensor, torch.Tensor):
         # Tmix expects (x, v_first) and returns (x_attn, v_first)
-        h, v_first = self.tmix(self.ln1(x), v_first)
+        x1 = self.ln1(x)
+        if x1.device.type == "cuda" and x1.dtype != torch.bfloat16:
+            x1 = x1.to(torch.bfloat16)
+        x1 = x1.contiguous()
+        h, v_first = self.tmix(x1, v_first)
+
+        x2 = self.ln2(x)
+        if x2.device.type == "cuda" and x2.dtype != torch.bfloat16:
+            x2 = x2.to(torch.bfloat16)
+        x2 = x2.contiguous()
         x = x + h
-        x = x + self.cmix(self.ln2(x))
+        x = x + self.cmix(x2)
         return x, v_first
 
 class V7Core(nn.Module):
@@ -125,10 +134,11 @@ class RWKVv7Separator(nn.Module):
         os.environ.setdefault("RWKV_MY_TESTING", "x070")
 
         self.core = BiV7Core(v7args, dir_drop_p=cfg.dir_drop_p)
-        self.up = nn.Linear(H, C)
-
+        # after creating self.core in RWKVv7Separator.__init__
         if self.cfg.enforce_bf16 and torch.cuda.is_available():
-            self.core = self.core.to(torch.bfloat16)  # cast ALL v7 blocks (lns, linears) to bf16
+            self.core = self.core.to(torch.bfloat16)    # cast Tmix/CMix LNs & linears to bf16
+
+        self.up = nn.Linear(H, C)
 
         # Heads
         head_hidden = max(64, C)
@@ -147,15 +157,13 @@ class RWKVv7Separator(nn.Module):
         """
         assert z_mix.dim() == 3, f"Expected [B,T,C], got {z_mix.shape}"
         B,T,C = z_mix.shape
+
         x = self.down(z_mix)
 
         # The official kernel is fastest in bf16; cast activations if desired.
         if self.cfg.enforce_bf16 and z_mix.device.type == "cuda":
             x = x.to(torch.bfloat16)
-
-        x = self.down(z_mix)
-        if self.cfg.enforce_bf16 and z_mix.device.type == "cuda":
-            x = x.to(torch.bfloat16)
+        
         x = x.contiguous()  # important for the CUDA kernel
         
         h = self.core(x)
