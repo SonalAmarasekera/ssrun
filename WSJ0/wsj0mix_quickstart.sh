@@ -5,7 +5,7 @@ git clone https://github.com/mpariente/pywsj0-mix.git
 
 # Install kagglehub
 pip install kagglehub
-pip install ninja
+pip install ninja wandb
 pip install torch pytorch-lightning==1.9.5 deepspeed
 
 # Get the root files from Kagglehub
