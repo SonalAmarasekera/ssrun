@@ -17,7 +17,7 @@ from pit_losses import total_separator_loss
 class HParams:
     # data
     train_root: str = "/content/latents/train"
-    val_root:   str = "/content/latents/val"
+    val_root:   str = "/content/latents/dev"
     batch_size: int = 8
     num_workers: int = 4
     pin_memory: bool = True
