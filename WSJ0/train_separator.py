@@ -210,16 +210,27 @@ def main():
 def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> float:
     model.eval()
     losses = []
+    use_bf16 = (device.type == "cuda")
+
     for batch in loader:
         for k in ("z_mix","z_s1","z_s2","mask","fps","sr"):
             if k in batch and torch.is_tensor(batch[k]):
                 batch[k] = batch[k].to(device, non_blocking=True)
+
         z_mix, z_s1, z_s2, mask = batch["z_mix"], batch["z_s1"], batch["z_s2"], batch["mask"]
-        # keep full length for validation (no crop)
-        out = model(z_mix)
-        loss, logs, _ = total_separator_loss(out, z_s1, z_s2, mask,
-                                             lambda_residual_l2=hp.lambda_residual_l2,
-                                             lambda_mask_entropy=hp.lambda_mask_entropy)
+
+        if use_bf16:
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                out  = model(z_mix)
+                loss, logs, _ = total_separator_loss(out, z_s1, z_s2, mask,
+                                                     lambda_residual_l2=hp.lambda_residual_l2,
+                                                     lambda_mask_entropy=hp.lambda_mask_entropy)
+        else:
+            out  = model(z_mix)
+            loss, logs, _ = total_separator_loss(out, z_s1, z_s2, mask,
+                                                 lambda_residual_l2=hp.lambda_residual_l2,
+                                                 lambda_mask_entropy=hp.lambda_mask_entropy)
+
         losses.append(float(logs["loss/total"]))
     return sum(losses)/max(1,len(losses))
 
