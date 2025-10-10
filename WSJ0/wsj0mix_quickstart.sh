@@ -23,7 +23,7 @@ cd pywsj0-mix/
 
 echo "Starting data creation..."
 # Generate data for 2 speakers at 8k
-python generate_wsjmix.py -p /content/2 -o /content/ -n 2 -sr 8000
+python generate_wsjmix.py -p /content/2 -o /content/ -n 2 -sr 16000
 
 cd ../
 
