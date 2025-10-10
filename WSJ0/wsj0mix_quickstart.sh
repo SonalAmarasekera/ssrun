@@ -7,6 +7,7 @@ git clone https://github.com/BlinkDL/RWKV-LM.git
 # Install kagglehub
 pip install kagglehub
 pip install ninja wandb
+pip install git+https://github.com/descriptinc/descript-audio-codec
 
 # Get the root files from Kagglehub
 python wsj0mix_kagglehub.py
