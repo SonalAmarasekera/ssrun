@@ -2,6 +2,7 @@
 
 # Cloning the needed repos
 git clone https://github.com/mpariente/pywsj0-mix.git
+git clone https://github.com/BlinkDL/RWKV-LM.git
 
 # Install kagglehub
 pip install kagglehub
