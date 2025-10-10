@@ -7,10 +7,14 @@ git clone https://github.com/BlinkDL/RWKV-LM.git
 # Install kagglehub
 pip install kagglehub
 pip install ninja wandb
-pip install torch pytorch-lightning==1.9.5 deepspeed
 
 # Get the root files from Kagglehub
 python wsj0mix_kagglehub.py
+
+#Moving to RWKV directory and installing dependencies
+cd RWKV-LM/RWKV-v7/train_temp
+pip install -r requirements.txt
+cd ../../../
 
 # Move the data files to accessible space
 mv /root/.cache/kagglehub/datasets/sonishmaharjan555/wsj0-2mix/versions/2 /content/
