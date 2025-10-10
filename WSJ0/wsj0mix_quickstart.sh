@@ -28,10 +28,10 @@ python generate_wsjmix.py -p /content/2 -o /content/ -n 2 -sr 16000
 cd ../
 
 # Mapping the CSVs
-python make_csv.py --root /content/2speakers/wav8k/min/tr --out train_min.csv
-python make_csv.py --root /content/2speakers/wav8k/min/cv --out dev_min.csv
-python make_csv.py --root /content/2speakers/wav8k/min/tt --out test_min.csv
+python make_csv.py --root /content/2speakers/wav16k/min/tr --out train_min.csv
+python make_csv.py --root /content/2speakers/wav16k/min/cv --out dev_min.csv
+python make_csv.py --root /content/2speakers/wav16k/min/tt --out test_min.csv
 
-python make_csv.py --root /content/2speakers/wav8k/max/tr --out train_max.csv
-python make_csv.py --root /content/2speakers/wav8k/max/cv --out dev_max.csv
-python make_csv.py --root /content/2speakers/wav8k/max/tt --out test_max.csv
+python make_csv.py --root /content/2speakers/wav16k/max/tr --out train_max.csv
+python make_csv.py --root /content/2speakers/wav16k/max/cv --out dev_max.csv
+python make_csv.py --root /content/2speakers/wav16k/max/tt --out test_max.csv
