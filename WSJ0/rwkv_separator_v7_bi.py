@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import official RWKV-v7 components from the author's file
-from rwkv_orig_model import RWKV_Tmix_x070, RWKV_CMix_x070
+from RWKV-LM.RWKV-v5.src.model import RWKV_Tmix_x070, RWKV_CMix_x070
 
 # ----------------------- Configs -----------------------
 
