@@ -1,25 +1,24 @@
 #!/bin/bash
 
+# WSJ0 root data download and move
+pip install kagglehub
+python wsj0mix_kagglehub.py
+mv /root/.cache/kagglehub/datasets/sonishmaharjan555/wsj0-2mix/versions/2 /content/
+
 # Cloning the needed repos
 git clone https://github.com/mpariente/pywsj0-mix.git
 git clone https://github.com/BlinkDL/RWKV-LM.git
 
-# Install kagglehub
-pip install kagglehub
+# Required packages
 pip install ninja wandb
 pip install git+https://github.com/descriptinc/descript-audio-codec
-
-# Get the root files from Kagglehub
-python wsj0mix_kagglehub.py
 
 #Moving to RWKV directory and installing dependencies
 cd RWKV-LM/RWKV-v7/train_temp
 pip install -r requirements.txt
 cd ../../../
 
-# Move the data files to accessible space
-mv /root/.cache/kagglehub/datasets/sonishmaharjan555/wsj0-2mix/versions/2 /content/
-
+# Creating the WSJ0mix
 cd pywsj0-mix/
 
 echo "Starting data creation..."
