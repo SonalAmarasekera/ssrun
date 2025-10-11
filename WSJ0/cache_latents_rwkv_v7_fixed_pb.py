@@ -1,256 +1,295 @@
-
 #!/usr/bin/env python
 """
-cache_latents_rwkv_v7_fixed.py
+Encode Libri2Mix source WAVs with the 16-kHz Descript Audio Codec
+and save latent tensors (.pt) for later training.
 
-Purpose
--------
-Pre-compute codec embeddings (latents) from WAV files and save them as PyTorch .pt
-payloads with **layout = [T, C]** which is the preferred on-disk convention for
-feeding **RWKV-v7** (training will stack a batch dim to get [B, T, C]).
-
-This script:
-- Accepts either a CSV list (mixture, s1, s2) or an input directory to scan.
-- Encodes audio using a Neural Audio Codec (e.g., Descript Audio Codec / EnCodec).
-- Saves **.pt** with z.shape == [T, C] plus rich metadata (fps, codec tag, sr, bitrate, n_quantizers, etc.).
-- Mirrors input directory structure under --out_dir, ensuring files land in their respective folders.
-
-Why [T, C] on disk?
--------------------
-RWKV-v7 blocks typically operate on tensors laid out as [B, T, C] during training/inference.
-Storing per-file latents as [T, C] keeps them batch-agnostic; the dataloader adds the B dimension.
-
-Usage
------
-1) CSV mode:
-   python cache_latents_rwkv_v7_fixed.py \
-       --csv data/libri2mix_train.csv \
-       --out_dir data/latents/train \
-       --model_type dac_16khz --device cuda
-
-   CSV must have headers: mix_path,s1_path,s2_path
-   (You can also pass --save_targets 0 to only save mixture embeddings.)
-
-2) Directory mode (single-stream, e.g., just mixtures):
-   python cache_latents_rwkv_v7_fixed.py \
-       --in_dir data/mixtures \
-       --out_dir data/latents/mixtures \
-       --model_type dac_16khz --device cuda --mirror_dirs 1
-
-Notes
------
-- This file does not ship the codec. It expects a codec "encode" function returning latents as [1, C, T] or [C, T].
-- This script will normalize shape to [T, C].
+Usage:
+    python cache_latents.py --csv data/train.csv --out_dir data/latents/train
 """
 
 import argparse
 import csv
+import math
 import os
-from pathlib import Path
-from typing import Dict, Tuple, List, Optional
+import pathlib
+import sys
+import multiprocessing as mp
+from typing import Iterable, List, Tuple, Optional, Dict
 
+import numpy as np
+import soundfile as sf
 import torch
-import torchaudio
-try:
-    from tqdm import tqdm
-except Exception:
-    # Fallback: identity wrapper if tqdm missing
-    def tqdm(x, total=None, desc=None):
-        return x
+import tqdm
+
+import dac
 
 
-# --------------------------------- Codec loader ----------------------------------
+# ---------------------------- Audio discovery (mirror mode) ----------------------------
 
-def load_codec(model_type: str, device: str, bitrate: Optional[float], n_quantizers: Optional[int]):
-    """
-    Replace this stub with your actual codec loader.
-    It must return an object with a .encode(waveform, sr) -> latent Tensor
-    where latent is shaped either [1, C, T] or [C, T] (will be normalized).
-    """
-    try:
-        # Example for DAC if you have a wrapper:
-        # from dac_wrapper import load_dac
-        # return load_dac(model_type=model_type, device=device, bitrate=bitrate, n_quantizers=n_quantizers)
-        pass
-    except Exception as e:
-        raise RuntimeError(f"Failed to load codec '{model_type}': {e}")
-    return DummyCodec(model_type, device, bitrate, n_quantizers)
+AUDIO_EXTS = {".wav", ".flac", ".mp3", ".ogg", ".m4a"}
 
 
-class DummyCodec:
-    """Fallback stub that simply downsamples audio to 100 fps frames of 64-D as a placeholder."""
-    def __init__(self, model_type, device, bitrate, n_quantizers):
-        self.model_type = model_type
-        self.device = device
-        self.bitrate = bitrate
-        self.n_quantizers = n_quantizers
-        self.fps = 320  # typical latent rate used by many 16 kHz codecs; replace if your codec exposes its fps
-
-    def encode(self, wav: torch.Tensor, sr: int) -> torch.Tensor:
-        # wav: [1, T]
-        # Produce a fake latent: frame @ 10 ms = ~100 fps, but we'll use self.fps
-        hop = int(sr / self.fps)
-        if hop <= 0: hop = max(1, sr // 320)
-        T = wav.shape[-1] // hop
-        C = 64
-        z = torch.randn(1, C, T, dtype=torch.float32, device=wav.device)
-        return z
-
-# -------------------------------- Utility helpers --------------------------------
-
-AUDIO_EXTS = {".wav", ".flac", ".mp3", ".ogg"}
-
-def ensure_parent(path: Path):
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-def guess_fps_from_codec(codec_obj, sr: int) -> int:
-    # Try to read from codec, else fallback by sample rate
-    fps = getattr(codec_obj, "fps", None)
-    if isinstance(fps, int) and fps > 0:
-        return fps
-    # Fallbacks (adjust per your codec):
-    # Many 16 kHz codecs use ~320 fps; 24 kHz ~ 480; 44.1 kHz ~ 882
-    if sr == 16000:
-        return 320
-    if sr == 24000:
-        return 480
-    if sr in (44100, 48000):
-        return 882 if sr == 44100 else 960
-    return 320
-
-def normalize_to_TxC(latent: torch.Tensor) -> torch.Tensor:
-    """
-    Normalize latent to shape [T, C].
-    Accepts [1, C, T], [C, T], or [T, C].
-    """
-    if latent.dim() == 3 and latent.shape[0] == 1:
-        # [1, C, T] -> [T, C]
-        latent = latent.squeeze(0).permute(1, 0).contiguous()
-    elif latent.dim() == 2:
-        # [C, T] or [T, C] -> disambiguate by assuming more time than channels
-        if latent.shape[0] < latent.shape[1]:
-            # likely [C, T]
-            latent = latent.permute(1, 0).contiguous()
-        # else assume already [T, C]
-    else:
-        raise ValueError(f"Unsupported latent shape: {tuple(latent.shape)}")
-    return latent
-
-def save_pt(save_path: Path, z_TxC: torch.Tensor, meta: Dict):
-    ensure_parent(save_path)
-    payload = {
-        "z": z_TxC.cpu().float(),   # [T, C]
-        "layout": "TC",
-        **meta
-    }
-    torch.save(payload, save_path)
-
-def mirror_rel_path(src: Path, in_root: Path) -> Path:
-    """Return the path of src relative to in_root, preserving subdirectories."""
-    try:
-        return src.relative_to(in_root)
-    except Exception:
-        # Fallback: use just the file name
-        return Path(src.name)
-
-# ------------------------------ Core processing ----------------------------------
-
-def process_file(wav_path: Path, out_dir: Path, codec, device: str,
-                 bitrate: Optional[float], n_quantizers: Optional[int],
-                 expect_sr: Optional[int], mirror_dirs: bool,
-                 in_root: Optional[Path]) -> Path:
-    wav_path = wav_path.resolve()
-    if not wav_path.exists():
-        raise FileNotFoundError(wav_path)
-
-    wav, sr = torchaudio.load(str(wav_path))
-    if wav.dim() == 2:
-        wav = wav[:1]  # make mono [1, T]
-    if expect_sr and sr != expect_sr:
-        # Resample to expected sr (safer than assert)
-        wav = torchaudio.functional.resample(wav, sr, expect_sr)
-        sr = expect_sr
-
-    wav = wav.to(device)
-    z = codec.encode(wav, sr)  # expected [1, C, T] or [C, T]; we normalize next
-    z_TxC = normalize_to_TxC(z)
-
-    # Destination path
-    if in_root and mirror_dirs:
-        rel = mirror_rel_path(wav_path, in_root).with_suffix(".pt")
-        dst = out_dir / rel
-    else:
-        dst = out_dir / (wav_path.stem + ".pt")
-
-    meta = {
-        "fps": guess_fps_from_codec(codec, sr),
-        "sr": sr,
-        "codec": getattr(codec, "model_type", "unknown"),
-        "bitrate": bitrate,
-        "n_quantizers": n_quantizers,
-        "source_path": str(wav_path),
-        "schema_version": 2,
-        "dtype": "float32",
-        "shape": tuple(z_TxC.shape)
-    }
-    save_pt(dst, z_TxC, meta)
-    return dst
-
-def scan_audio_files(in_dir: Path) -> List[Path]:
+def find_audio_paths(root: pathlib.Path) -> List[pathlib.Path]:
+    if root.is_file():
+        return [root]
     files = []
-    for p in in_dir.rglob("*"):
+    for p in root.rglob("*"):
         if p.suffix.lower() in AUDIO_EXTS and p.is_file():
             files.append(p)
-    files.sort()
     return files
 
-# ------------------------------------- CLI ---------------------------------------
+
+# ---------------------------- Windowed encoding utility ----------------------------
+
+def chunk_indices(num_samples: int, sr: int, win_seconds: float) -> List[Tuple[int, int]]:
+    if win_seconds <= 0:
+        return [(0, num_samples)]
+    hop = int(sr * win_seconds)
+    if hop <= 0:
+        return [(0, num_samples)]
+    idx = []
+    start = 0
+    while start < num_samples:
+        end = min(num_samples, start + hop)
+        idx.append((start, end))
+        start = end
+    return idx
+
+
+# ---------------------------- Encoding core ----------------------------
+
+def _encode_tensor(
+    wav_f32: np.ndarray,
+    sr: int,
+    device: str,
+    win_seconds: float,
+    codec_kwargs: Dict
+) -> torch.Tensor:
+    """Return latent tensor z: [1, C, T_latent]."""
+    assert sr in (16000, 24000, 44100), f"Unsupported sample rate {sr}; choose model_type to match."
+    wav = torch.from_numpy(wav_f32).unsqueeze(0).unsqueeze(0).to(device)  # [1,1,N]
+    with torch.no_grad():
+        if win_seconds <= 0:
+            z, *_ = _CODEC.encode(wav, **codec_kwargs)
+            return z
+        # windowed: concatenate latents along time dimension
+        N = wav.shape[-1]
+        pieces = []
+        for s, e in chunk_indices(N, sr, win_seconds):
+            z_part, *_ = _CODEC.encode(wav[..., s:e], **codec_kwargs)
+            pieces.append(z_part)
+        z = torch.cat(pieces, dim=-1)
+        return z
+
+
+def _write_pt(save_path: pathlib.Path, z: torch.Tensor):
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"z": z.cpu()}, save_path)
+
+
+# ---------------------------- Worker wrapper ----------------------------
+
+def _worker_encode(args):
+    """Worker-safe wrapper: (wav_path, save_path, device, expect_sr, win_seconds, codec_kwargs)."""
+    wav_path, save_path, device, expect_sr, win_seconds, codec_kwargs = args
+    if save_path.exists():
+        return  # idempotent
+    # read
+    wav, sr = sf.read(wav_path, dtype="float32", always_2d=False)
+    if wav.ndim == 2:  # mixdown if stereo
+        wav = wav.mean(axis=1)
+    if expect_sr is not None:
+        assert sr == expect_sr, f"Expected {expect_sr}Hz, got {sr} @ {wav_path}"
+    # encode
+    z = _encode_tensor(wav, sr, device, win_seconds, codec_kwargs)
+    _write_pt(save_path, z)
+
+
+# ---------------------------- Job builders ----------------------------
+
+def build_jobs_from_csv(
+    csv_path: pathlib.Path,
+    out_root: pathlib.Path,
+    mirror_from: Optional[pathlib.Path],
+    expect_sr: Optional[int],
+    device: str,
+    win_seconds: float,
+    codec_kwargs: Dict
+) -> List[Tuple[pathlib.Path, pathlib.Path, str, Optional[int], float, Dict]]:
+    rows = list(csv.DictReader(open(csv_path)))
+    # column → subdir mapping
+    col2sub = {"mix_path": "mix_clean", "s1_path": "s1", "s2_path": "s2"}
+    jobs = []
+    for row in rows:
+        for col, sub in col2sub.items():
+            p = row.get(col, "")
+            if not p:
+                continue
+            wav_path = pathlib.Path(p)
+            # mirrored relative path (if requested)
+            if mirror_from is not None:
+                rel = pathlib.Path(os.path.relpath(str(wav_path), str(mirror_from)))
+                save_path = out_root / sub / rel.with_suffix(".pt")
+            else:
+                save_path = out_root / sub / (wav_path.stem + ".pt")
+            jobs.append((wav_path, save_path, device, expect_sr, win_seconds, codec_kwargs))
+    return jobs
+
+
+def build_jobs_from_mirror(
+    in_path: pathlib.Path,
+    out_root: pathlib.Path,
+    expect_sr: Optional[int],
+    device: str,
+    win_seconds: float,
+    codec_kwargs: Dict
+) -> List[Tuple[pathlib.Path, pathlib.Path, str, Optional[int], float, Dict]]:
+    in_path = in_path.resolve()
+    files = find_audio_paths(in_path)
+    jobs = []
+    for f in files:
+        rel = f.relative_to(in_path) if in_path.is_dir() else pathlib.Path(f.name)
+        save_path = (out_root / rel).with_suffix(".pt")
+        jobs.append((f, save_path, device, expect_sr, win_seconds, codec_kwargs))
+    return jobs
+
+
+# ---------------------------- CLI and main ----------------------------
 
 def main():
     ap = argparse.ArgumentParser()
-    g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--csv", type=str, help="CSV with headers: mix_path,s1_path,s2_path")
-    g.add_argument("--in_dir", type=str, help="Directory containing WAVs to encode")
-    ap.add_argument("--out_dir", type=str, required=True)
-    ap.add_argument("--model_type", type=str, default="dac_16khz")
-    ap.add_argument("--device", type=str, default="cuda")
-    ap.add_argument("--bitrate", type=float, default=None)
-    ap.add_argument("--n_quantizers", type=int, default=None)
-    ap.add_argument("--expect_sr", type=int, default=16000, help="Resample to this SR if different")
-    ap.add_argument("--mirror_dirs", type=int, default=1, help="Mirror input subdirs under out_dir (1/0)")
-    ap.add_argument("--save_targets", type=int, default=1, help="CSV mode: also save s1/s2 (1/0)")
+    # Input selection
+    g_in = ap.add_mutually_exclusive_group(required=True)
+    g_in.add_argument("--csv", type=str, help="CSV with mix_path,s1_path,s2_path")
+    g_in.add_argument("--in_path", type=str, help="File or directory (mirror mode)")
+    ap.add_argument("--out_dir", required=True, type=str, help="Root folder to write latents")
+
+    # Mirroring options (CSV mode only)
+    ap.add_argument("--mirror_from", type=str, default=None,
+                    help="Root folder to preserve substructure relative to this path (CSV mode)")
+
+    # Performance mode
+    ap.add_argument("--fast_mp", action="store_true", help="Use multiprocessing (faster, higher VRAM)")
+    ap.add_argument("--workers", type=int, default=max(1, mp.cpu_count() // 2))
+
+    # Codec/model options (like encode.py)
+    ap.add_argument("--model_type", type=str, default="16khz", choices=["16khz", "24khz", "44khz"])
+    ap.add_argument("--bitrate", type=str, default=None, choices=[None, "8kbps", "16kbps"])
+    ap.add_argument("--n_quantizers", type=int, default=None, help="Override number of residual quantizers if supported")
+    ap.add_argument("--weights_path", type=str, default=None, help="Path to custom model weights")
+    ap.add_argument("--model_tag", type=str, default=None, help="Alternative tag identifying model weights")
+
+    # Device & memory
+    ap.add_argument("--device", type=str, default=None, help="'cuda' or 'cpu'. Default: auto")
+    ap.add_argument("--win_seconds", type=float, default=0.0,
+                    help="Encode in windows of N seconds (0 = full file). Helps on low VRAM.")
+
     args = ap.parse_args()
 
-    out_dir = Path(args.out_dir)
-    codec = load_codec(args.model_type, args.device, args.bitrate, args.n_quantizers)
+    out_root = pathlib.Path(args.out_dir)
+    out_root.mkdir(parents=True, exist_ok=True)
 
+    # Resolve device
+    device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Expected SR per model_type
+    expect_sr = {"16khz": 16000, "24khz": 24000, "44khz": 44100}[args.model_type]
+
+    # Build codec kwargs for encode()
+    codec_kwargs: Dict = {}
+    if args.n_quantizers is not None:
+        # Some DAC builds accept n_quantizers in encode(); we pass through if supported.
+        codec_kwargs["n_quantizers"] = int(args.n_quantizers)
+    if args.bitrate is not None:
+        # Some builds accept bitrate string; forward if supported.
+        codec_kwargs["bitrate"] = args.bitrate
+
+    # Jobs
     if args.csv:
-        csv_path = Path(args.csv)
-        assert csv_path.exists(), f"CSV not found: {csv_path}"
-        with open(csv_path, "r", newline="") as f:
-            reader = csv.DictReader(f)
-            required = {"mix_path", "s1_path", "s2_path"}
-            assert required.issubset(reader.fieldnames), f"CSV must have headers: {required}"
-            files = []
-            for row in reader:
-                mix = Path(row["mix_path"]); files.append((mix, "mix"))
-                if args.save_targets:
-                    s1 = Path(row["s1_path"]); files.append((s1, "s1"))
-                    s2 = Path(row["s2_path"]); files.append((s2, "s2"))
-            for wav_path, kind in tqdm(files, total=len(files), desc="Caching latents from CSV"):
-                process_file(
-                    wav_path, out_dir / kind, codec, args.device, args.bitrate, args.n_quantizers,
-                    args.expect_sr, bool(args.mirror_dirs), wav_path.parent
-                )
+        mirror_from = pathlib.Path(args.mirror_from).resolve() if args.mirror_from else None
+        jobs = build_jobs_from_csv(
+            pathlib.Path(args.csv),
+            out_root,
+            mirror_from,
+            expect_sr,
+            device,
+            args.win_seconds,
+            codec_kwargs,
+        )
     else:
-        in_dir = Path(args.in_dir)
-        assert in_dir.exists(), f"Input dir not found: {in_dir}"
-        wavs = scan_audio_files(in_dir)
-        for wav in tqdm(wavs, total=len(wavs), desc="Caching latents from dir"):
-            process_file(
-                wav, Path(args.out_dir), codec, args.device, args.bitrate, args.n_quantizers,
-                args.expect_sr, bool(args.mirror_dirs), in_dir
-            )
+        jobs = build_jobs_from_mirror(
+            pathlib.Path(args.in_path),
+            out_root,
+            expect_sr,
+            device,
+            args.win_seconds,
+            codec_kwargs,
+        )
+
+    print(f"[cache_latents] model_type={args.model_type} device={device} "
+          f"win_seconds={args.win_seconds} fast_mp={args.fast_mp}")
+    print(f"[cache_latents] jobs: {len(jobs)}  →  out_dir={out_root}")
+
+    if not jobs:
+        return
+
+    # Run
+    if args.fast_mp:
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(args.workers) as pool:
+            list(tqdm.tqdm(pool.imap(_worker_encode, jobs), total=len(jobs)))
+    else:
+        for job in tqdm.tqdm(jobs, total=len(jobs)):
+            _worker_encode(job)
+
+
+# ---------------------------- Global codec load ----------------------------
+
+def _load_codec(model_type: str, device: str, weights_path: Optional[str], model_tag: Optional[str]):
+    """
+    Load DAC model. We prefer built-in downloads; fall back to tag/weights if provided.
+    """
+    # Default path: official downloads for 16/24/44 kHz
+    try:
+        model = dac.DAC.load(dac.utils.download(model_type))
+    except Exception:
+        # Optional alternate pathways
+        if weights_path is not None:
+            model = dac.DAC.load(weights_path)
+        elif model_tag is not None:
+            model = dac.DAC.load(dac.utils.download(model_tag))
+        else:
+            raise
+    return model.eval().to(device)
+
+
+# Load once at module import so workers reuse it
+_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+_MODEL_TYPE_ENV = os.environ.get("DAC_MODEL_TYPE", "16khz")
+_CODEC = _load_codec(_MODEL_TYPE_ENV, _DEVICE, weights_path=None, model_tag=None)
+torch.set_grad_enabled(False)
+
+
+# --------------------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Allow overriding global preload using CLI by reloading after parse.
+    # We re-enter main which will use the preloaded _CODEC; to honor CLI model_type,
+    # reload here before dispatch if it differs.
+    mp.set_start_method("spawn", force=True)
+    # Peek CLI to decide if we need to reload codec with another model_type/device.
+    # We do a light parse to avoid duplicating argparse logic.
+    try:
+        idx = sys.argv.index("--model_type")
+        requested_type = sys.argv[idx + 1]
+    except ValueError:
+        requested_type = _MODEL_TYPE_ENV
+    try:
+        didx = sys.argv.index("--device")
+        requested_device = sys.argv[didx + 1]
+    except ValueError:
+        requested_device = _DEVICE
+    if (requested_type != _MODEL_TYPE_ENV) or (requested_device != _DEVICE):
+        # reload to match user request
+        _CODEC = _load_codec(requested_type, requested_device, None, None)
     main()
