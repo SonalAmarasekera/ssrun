@@ -18,6 +18,10 @@ cd RWKV-LM/RWKV-v7/train_temp
 pip install -r requirements.txt
 cd ../../../
 
+# Renaming RWKV repo for access inside script
+mv RWKV-LM/RWKV-v7 RWKV-LM/RWKV_v7
+mv RWKV-LM RWKV
+
 # Creating the WSJ0mix
 cd pywsj0-mix/
 
