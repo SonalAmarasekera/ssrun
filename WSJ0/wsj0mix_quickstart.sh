@@ -15,12 +15,16 @@ pip install git+https://github.com/descriptinc/descript-audio-codec
 
 #Moving to RWKV directory and installing dependencies
 cd RWKV-LM/RWKV-v7/train_temp
+rm -f src/model.py
 pip install -r requirements.txt
 cd ../../../
 
 # Renaming RWKV repo for access inside script
 mv RWKV-LM/RWKV-v7 RWKV-LM/RWKV_v7
 mv RWKV-LM RWKV
+
+# Moving the edited model.py inside the original repo
+mv model.py RWKV/RWKV_v7/train_temp/src/
 
 # Creating the WSJ0mix
 cd pywsj0-mix/
