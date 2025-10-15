@@ -23,8 +23,9 @@ cd ../../../
 mv RWKV-LM/RWKV-v7 RWKV-LM/RWKV_v7
 mv RWKV-LM RWKV
 
-# Moving the edited model.py inside the original repo
+# Moving the edited model.py inside the original repo and cuda folder to the main area
 mv model.py RWKV/RWKV_v7/train_temp/src/
+cp -r RWKV/RWKV_v7/train_temp/cuda .
 
 # Creating the WSJ0mix
 cd pywsj0-mix/
