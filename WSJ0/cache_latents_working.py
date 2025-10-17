@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Encode Libri2Mix source WAVs with the 16-kHz Descript Audio Codec
+Encode WSJ0 source WAVs with the 16-kHz Descript Audio Codec
 and save latent tensors (.pt) for later training.
 
 Usage:
