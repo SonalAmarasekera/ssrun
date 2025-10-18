@@ -22,7 +22,7 @@ from rwkv_separator_v7_bi import RWKVv7Separator, SeparatorV7Config
 from pit_losses import total_separator_loss
 from functools import partial
 
-CHUNK_LEN = 16  # must match the kernel’s constant
+#CHUNK_LEN = 16  # must match the kernel’s constant
 
 # ----------------- hyperparameters -----------------
 @dataclass
@@ -122,7 +122,7 @@ def main():
     train_ds = RWKVLatentDataset(hp.train_root, require_targets=True, expected_C=C_meta)
     val_ds   = RWKVLatentDataset(hp.val_root,   require_targets=True, expected_C=C_meta)
 
-    collate_fn = partial(collate_rwkv_latents, chunk_len=CHUNK_LEN)
+    collate_fn = partial(collate_rwkv_latents, chunk_len=None)
 
     train_loader = DataLoader(train_ds, batch_size=hp.batch_size, shuffle=True,
                               num_workers=hp.num_workers, pin_memory=hp.pin_memory,
