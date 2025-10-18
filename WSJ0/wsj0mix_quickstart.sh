@@ -32,15 +32,15 @@ cd pywsj0-mix/
 
 echo "Starting data creation..."
 # Generate data for 2 speakers at 8k
-python generate_wsjmix.py -p /kaggle/input/wsj0-2mix/ -o /content/ -n 2 -sr 16000
+python generate_wsjmix.py -p /root/.cache/kagglehub/datasets/sonishmaharjan555/wsj0-2mix/versions/2/ -o /workspace/ -n 2 -sr 16000 --len_mode min
 
 cd ../
 
 # Mapping the CSVs
-python make_csv.py --root /content/2speakers/wav16k/min/tr --out train_min.csv
-python make_csv.py --root /content/2speakers/wav16k/min/cv --out dev_min.csv
-python make_csv.py --root /content/2speakers/wav16k/min/tt --out test_min.csv
+python make_csv.py --root /workspace/2speakers/wav16k/min/tr --out train_min.csv
+python make_csv.py --root /workspace/2speakers/wav16k/min/cv --out dev_min.csv
+python make_csv.py --root /workspace/2speakers/wav16k/min/tt --out test_min.csv
 
-python make_csv.py --root /content/2speakers/wav16k/max/tr --out train_max.csv
-python make_csv.py --root /content/2speakers/wav16k/max/cv --out dev_max.csv
-python make_csv.py --root /content/2speakers/wav16k/max/tt --out test_max.csv
+#python make_csv.py --root /workspace/2speakers/wav16k/max/tr --out train_max.csv
+#python make_csv.py --root /workspace/2speakers/wav16k/max/cv --out dev_max.csv
+#python make_csv.py --root /workspace/2speakers/wav16k/max/tt --out test_max.csv
