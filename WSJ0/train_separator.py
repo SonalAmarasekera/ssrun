@@ -114,6 +114,19 @@ def normalize_latent(z):
     std = z.std(dim=(1, 2), keepdim=True)
     return (z - mean) / (std + 1e-5)
 
+def audit_channel_counts(ds):
+    Cs = {}
+    for i in range(min(len(ds), 1000)):  # limit for speed
+        rel = ds.items[i]
+        obj = torch.load(ds.mix_dir / (str(rel) + ".pt"), map_location="cpu")
+        z = obj["z"] if isinstance(obj, dict) else obj
+        t = torch.as_tensor(z)
+        if t.ndim == 3 and t.shape[0] == 1:
+            t = t.squeeze(0)
+        C = t.shape[1] if t.shape[1] <= 2048 else t.shape[0]
+        Cs[C] = Cs.get(C, 0) + 1
+    print("[audit] distinct C counts:", Cs)
+
 # ----------------- main train -----------------
 def main():
     set_seed(hp.seed)
@@ -126,6 +139,7 @@ def main():
 
     # Data
     train_ds = RWKVLatentDataset(hp.train_root, require_targets=True, expected_C=512)
+    audit_channel_counts(train_ds)
     val_ds   = RWKVLatentDataset(hp.val_root,   require_targets=True, expected_C=512)
 
     collate_fn = partial(collate_rwkv_latents, chunk_len=CHUNK_LEN)
