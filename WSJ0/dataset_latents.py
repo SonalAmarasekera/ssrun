@@ -83,6 +83,25 @@ class RWKVLatentDataset(Dataset):
         assert len(items) > 0, f"No items found under {self.root}"
         self.items = sorted(items)
 
+        # After: self.items = sorted(items)
+        # Enforce a single latent channel count across the dataset when expected_C is given.
+        if self.expected_C is not None:
+            kept = []
+            dropped = 0
+            for rel in self.items:
+                mix_p = self.mix_dir / (str(rel) + ".pt")
+                obj = torch.load(mix_p, map_location="cpu")
+                z = _to_tc(obj, expected_C=None)  # don’t force transpose yet, just read shape
+                C_here = z.shape[1]
+                if C_here == self.expected_C:
+                    kept.append(rel)
+                else:
+                    dropped += 1
+            if dropped > 0:
+                print(f"[dataset] filtered out {dropped} files with C != {self.expected_C}")
+            self.items = kept
+        assert len(self.items) > 0, f"No items with C={self.expected_C} under {self.root}"
+
     def __len__(self) -> int:
         return len(self.items)
 
