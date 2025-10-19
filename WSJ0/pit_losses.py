@@ -9,10 +9,14 @@ def _masked_mse(a: torch.Tensor, b: torch.Tensor, mask: Optional[torch.Tensor]) 
     # compute numerically in fp32 for stability; keep on same device
     diff = (a - b).to(torch.float32)  # [B,T,C]
     if mask is not None:
-        m = mask.unsqueeze(-1).to(diff.dtype)
-        diff = diff * m
-        denom = m.sum()
-        return (diff.square().sum() / torch.clamp_min(denom, 1.0))
+        m = mask.unsqueeze(-1).to(diff.dtype)      # [B,T,1]
+        diff = (a - b) * m                         # [B,T,C]
+        denom = (m.sum() * diff.shape[-1]).clamp_min(1.0)
+        return diff.square().sum() / denom
+#        m = mask.unsqueeze(-1).to(diff.dtype)
+#        diff = diff * m
+#        denom = m.sum()
+#        return (diff.square().sum() / torch.clamp_min(denom, 1.0))
     else:
         return diff.square().mean()
 
