@@ -181,6 +181,12 @@ def main():
             z_s1 = normalize_latent(z_s1)
             z_s2 = normalize_latent(z_s2)
 
+            # right before forward
+            assert z_mix.shape[-1] == cfg.in_dim, \
+                f"Batch C={z_mix.shape[-1]} disagrees with model C={cfg.in_dim}. " \
+                "Your dataset likely contains mixed latent channel counts. " \
+                "Re-cache to a single DAC config (e.g., C=512)."
+
             # forward (bf16 autocast if on cuda and configured)
             if device.type == "cuda" and hp.enforce_bf16:
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
