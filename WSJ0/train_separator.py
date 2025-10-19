@@ -22,29 +22,29 @@ from rwkv_separator_v7_bi import RWKVv7Separator, SeparatorV7Config
 from pit_losses import total_separator_loss
 from functools import partial
 
-#CHUNK_LEN = 16  # must match the kernel’s constant
+CHUNK_LEN = 16  # must match the kernel’s constant
 
 # ----------------- hyperparameters -----------------
 @dataclass
 class HParams:
     # data
-    train_root: str = "/content/latents/min/dev"
+    train_root: str = "/content/latents/min/train"
     val_root:   str = "/content/latents/min/test"
-    batch_size: int = 8
+    batch_size: int = 1
     num_workers: int = 2
     pin_memory: bool = True
     # segmenting (crop to fixed seconds during train for speed)
     seg_seconds: float = 6.0   # cropped length in seconds worth of latents (approx by fps)
     latent_fps: float = 50.0   # <-- SET THIS to your DAC latent frame rate (e.g., 50 or 75)
     # model
-    layers: int = 6
+    layers: int = 16
     head_size_a: int = 64
     hidden_dim: int | None = None     # auto (C//2 rounded to multiple of head_size_a) when None
     dir_drop_p: float = 0.5           # train bi with direction dropout
     use_mask: bool = True
     enforce_bf16: bool = True
     # optimization
-    epochs: int = 40
+    epochs: int = 1
     lr: float = 8e-4
     weight_decay: float = 1e-2
     betas: tuple[float,float] = (0.9, 0.95)
@@ -109,6 +109,11 @@ def crop_batch_to_seconds(batch, seg_seconds: float, fps: float, chunk_len: int)
     batch["mask"]  = torch.ones(B, frames, dtype=mask.dtype, device=mask.device)  # fully valid after crop
     return batch
 
+def normalize_latent(z):
+    mean = z.mean(dim=(1, 2), keepdim=True)
+    std = z.std(dim=(1, 2), keepdim=True)
+    return (z - mean) / (std + 1e-5)
+
 # ----------------- main train -----------------
 def main():
     set_seed(hp.seed)
@@ -116,13 +121,14 @@ def main():
 
     probe_ds = RWKVLatentDataset(hp.train_root, require_targets=True)
     probe = torch.load(next((hp for hp in (p for p in (probe_ds.mix_dir.rglob("*.pt")))), None))
-    C_meta = int(probe.get("C", 1024))  # fall back if older cache
+    C_meta = 512
+    #C_meta = int(probe.get("C", 1024))  # fall back if older cache
 
     # Data
-    train_ds = RWKVLatentDataset(hp.train_root, require_targets=True, expected_C=C_meta)
-    val_ds   = RWKVLatentDataset(hp.val_root,   require_targets=True, expected_C=C_meta)
+    train_ds = RWKVLatentDataset(hp.train_root, require_targets=True, expected_C=512)
+    val_ds   = RWKVLatentDataset(hp.val_root,   require_targets=True, expected_C=512)
 
-    collate_fn = partial(collate_rwkv_latents, chunk_len=None)
+    collate_fn = partial(collate_rwkv_latents, chunk_len=CHUNK_LEN)
 
     train_loader = DataLoader(train_ds, batch_size=hp.batch_size, shuffle=True,
                               num_workers=hp.num_workers, pin_memory=hp.pin_memory,
@@ -170,6 +176,10 @@ def main():
             B,T,C = z_mix.shape
             assert z_s1.shape == (B,T,C) and z_s2.shape == (B,T,C)
             assert mask.shape == (B,T)
+
+            z_mix = normalize_latent(z_mix)
+            z_s1 = normalize_latent(z_s1)
+            z_s2 = normalize_latent(z_s2)
 
             # forward (bf16 autocast if on cuda and configured)
             if device.type == "cuda" and hp.enforce_bf16:
@@ -256,4 +266,3 @@ if __name__ == "__main__":
     # Make sure CUDA path uses x070 kernels inside the imported model
     os.environ.setdefault("RWKV_MY_TESTING", "x070")
     main()
-
