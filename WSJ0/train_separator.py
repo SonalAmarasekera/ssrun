@@ -241,6 +241,10 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> floa
         z_s2  = batch["z_s2"].to(device, non_blocking=True)
         mask  = batch["mask"].to(device, non_blocking=True)
 
+        z_mix = normalize_latent(z_mix)
+        z_s1 = normalize_latent(z_s1)
+        z_s2 = normalize_latent(z_s2)
+
         if use_bf16:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 out = model(z_mix)
@@ -266,3 +270,4 @@ if __name__ == "__main__":
     # Make sure CUDA path uses x070 kernels inside the imported model
     os.environ.setdefault("RWKV_MY_TESTING", "x070")
     main()
+
