@@ -15,7 +15,7 @@ def _to_tc(z, expected_C: int | None = None) -> torch.Tensor:
     if t.ndim == 3 and t.shape[0] == 1:
         t = t.squeeze(0)        # [C,T] or [T,C]
     if t.ndim != 2:
-        raise ValueError(f"latent must be 2D, got {tuple(t.shape)}")
+        raise ValueError(f"latent must be 2D [T,C] (or [1,T,C] / [C,T]), got {tuple(t.shape)}")
 
     d0, d1 = int(t.shape[0]), int(t.shape[1])
 
@@ -36,20 +36,6 @@ def _to_tc(z, expected_C: int | None = None) -> torch.Tensor:
                 if d0 <= d1:
                     t = t.transpose(0, 1)
         return t.contiguous().to(torch.float32)
-
-    # No expected_C given: fall back to safer default
-    # Prefer [T,C] where C is the axis that is a multiple of 64 and <= 2048
-    if d1 % 64 == 0 and d1 <= 2048:
-        pass                      # already [T,C]
-    elif d0 % 64 == 0 and d0 <= 2048:
-        t = t.transpose(0, 1)     # [C,T] -> [T,C]
-    else:
-        # Ambiguous case: choose the smaller axis as C (usual C << T)
-        if d0 <= d1:
-            t = t.transpose(0, 1)
-    return t.contiguous().to(torch.float32)
-
-    raise ValueError(f"latent must be 2D [T,C] (or [1,T,C] / [C,T]), got {tuple(t.shape)}")
     
 class RWKVLatentDataset(Dataset):
     def __init__(self, root, require_targets=True, extensions=(".pt",), expected_C: int | None = None):
