@@ -23,6 +23,7 @@ from pit_losses import total_separator_loss
 from functools import partial
 
 CHUNK_LEN = 16  # must match the kernel’s constant
+hp.enforce_bf16 = True
 
 # ----------------- hyperparameters -----------------
 @dataclass
