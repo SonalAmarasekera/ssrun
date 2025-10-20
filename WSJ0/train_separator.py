@@ -133,15 +133,13 @@ def main():
     set_seed(hp.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    probe_ds = RWKVLatentDataset(hp.train_root, require_targets=True)
-    probe = torch.load(next((hp for hp in (p for p in (probe_ds.mix_dir.rglob("*.pt")))), None))
-    C_meta = 512
+    C_meta = 1024
     #C_meta = int(probe.get("C", 1024))  # fall back if older cache
 
     # Data
-    train_ds = RWKVLatentDataset(hp.train_root, require_targets=True, expected_C=512)
+    train_ds = RWKVLatentDataset(hp.train_root, require_targets=True, expected_C=C_meta)
     audit_channel_counts(train_ds)
-    val_ds   = RWKVLatentDataset(hp.val_root,   require_targets=True, expected_C=512)
+    val_ds   = RWKVLatentDataset(hp.val_root,   require_targets=True, expected_C=C_meta)
 
     collate_fn = partial(collate_rwkv_latents, chunk_len=CHUNK_LEN)
 
