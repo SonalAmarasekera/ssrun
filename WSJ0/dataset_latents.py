@@ -91,7 +91,7 @@ class RWKVLatentDataset(Dataset):
             for rel in self.items:
                 mix_p = self.mix_dir / (str(rel) + ".pt")
                 obj = torch.load(mix_p, map_location="cpu")
-                z = _to_tc(obj, expected_C=None)  # don’t force transpose yet, just read shape
+                z = _to_tc(obj, expected_C=self.expected_C)  # don’t force transpose yet, just read shape
                 C_here = z.shape[1]
                 if C_here == self.expected_C:
                     kept.append(rel)
