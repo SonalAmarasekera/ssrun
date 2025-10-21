@@ -23,7 +23,6 @@ from pit_losses import total_separator_loss
 from functools import partial
 
 CHUNK_LEN = 16  # must match the kernel’s constant
-hp.enforce_bf16 = True
 
 # ----------------- hyperparameters -----------------
 @dataclass
@@ -110,24 +109,6 @@ def crop_batch_to_seconds(batch, seg_seconds: float, fps: float, chunk_len: int)
     batch["mask"]  = torch.ones(B, frames, dtype=mask.dtype, device=mask.device)  # fully valid after crop
     return batch
 
-def normalize_latent(z):
-    mean = z.mean(dim=(1, 2), keepdim=True)
-    std = z.std(dim=(1, 2), keepdim=True)
-    return (z - mean) / (std + 1e-5)
-
-def audit_channel_counts(ds):
-    Cs = {}
-    for i in range(min(len(ds), 1000)):  # limit for speed
-        rel = ds.items[i]
-        obj = torch.load(ds.mix_dir / (str(rel) + ".pt"), map_location="cpu")
-        z = obj["z"] if isinstance(obj, dict) else obj
-        t = torch.as_tensor(z)
-        if t.ndim == 3 and t.shape[0] == 1:
-            t = t.squeeze(0)
-        C = t.shape[1] if t.shape[1] <= 2048 else t.shape[0]
-        Cs[C] = Cs.get(C, 0) + 1
-    print("[audit] distinct C counts:", Cs)
-
 # ----------------- main train -----------------
 def main():
     set_seed(hp.seed)
@@ -138,7 +119,6 @@ def main():
 
     # Data
     train_ds = RWKVLatentDataset(hp.train_root, require_targets=True, expected_C=C_meta)
-    audit_channel_counts(train_ds)
     val_ds   = RWKVLatentDataset(hp.val_root,   require_targets=True, expected_C=C_meta)
 
     collate_fn = partial(collate_rwkv_latents, chunk_len=CHUNK_LEN)
@@ -153,7 +133,7 @@ def main():
     # Model (RWKV-v7 Bi core)
     # infer C from a sample
     sample = next(iter(train_loader))
-    C = sample["z_mix"].shape[-1]
+    C = C_meta
     cfg = SeparatorV7Config(
         in_dim=C, layers=hp.layers, head_size_a=hp.head_size_a,
         hidden_dim=hp.hidden_dim, dir_drop_p=hp.dir_drop_p,
@@ -189,10 +169,6 @@ def main():
             B,T,C = z_mix.shape
             assert z_s1.shape == (B,T,C) and z_s2.shape == (B,T,C)
             assert mask.shape == (B,T)
-
-            z_mix = normalize_latent(z_mix)
-            z_s1 = normalize_latent(z_s1)
-            z_s2 = normalize_latent(z_s2)
 
             # right before forward
             assert z_mix.shape[-1] == cfg.in_dim, \
@@ -260,10 +236,6 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> floa
         z_s2  = batch["z_s2"].to(device, non_blocking=True)
         mask  = batch["mask"].to(device, non_blocking=True)
 
-        z_mix = normalize_latent(z_mix)
-        z_s1 = normalize_latent(z_s1)
-        z_s2 = normalize_latent(z_s2)
-
         if use_bf16:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 out = model(z_mix)
@@ -286,7 +258,5 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> floa
 
 
 if __name__ == "__main__":
-    # Make sure CUDA path uses x070 kernels inside the imported model
-    os.environ.setdefault("RWKV_MY_TESTING", "x070")
     main()
 
