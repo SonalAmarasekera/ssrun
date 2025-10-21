@@ -35,7 +35,15 @@ def _to_tc(z, expected_C: int | None = None) -> torch.Tensor:
             else:
                 if d0 <= d1:
                     t = t.transpose(0, 1)
-        return t.contiguous().to(torch.float32)
+    else: # When expected_C = None
+        if d1 % 64 == 0 and d1 <= 2048:
+            pass # Assume [T, C]
+        elif d0 % 64 and d0 <= 2048:
+            t = t.transpose(0, 1) # Assume [C, T] -> [T, C]
+        else:
+            if d0 <= d1:
+                t = t.transpose(0, 1)
+    return t.contiguous().to(torch.float32)
     
 class RWKVLatentDataset(Dataset):
     def __init__(self, root, require_targets=True, extensions=(".pt",), expected_C: int | None = None):
