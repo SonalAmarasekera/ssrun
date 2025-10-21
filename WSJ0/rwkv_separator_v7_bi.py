@@ -43,26 +43,32 @@ class V7Layer(nn.Module):
         super().__init__()
         self.args = args
         self.layer_id = layer_id
-        self.ln1 = nn.LayerNorm(args.n_embd)
+        self.ln1 = nn.LayerNorm(args.n_embd)   # keep these in fp32 params
         self.ln2 = nn.LayerNorm(args.n_embd)
         self.tmix = RWKV_Tmix_x070(args, layer_id)
         self.cmix = RWKV_CMix_x070(args, layer_id)
 
-    def forward(self, x: torch.Tensor, v_first: Optional[torch.Tensor]) -> (torch.Tensor, torch.Tensor):
-        # Be explicit: block fp16 autocast and enforce bf16+contig at the kernel boundary
-        with torch.cuda.amp.autocast(enabled=False):
-            x1 = self.ln1(x)
-            if x1.is_cuda and x1.dtype != torch.bfloat16:
-                x1 = x1.to(torch.bfloat16)
-            x1 = x1.contiguous()
-            h, v_first = self.tmix(x1, v_first)  # -> uses fused op internally
+    def _to_bf16_contig(self, t: torch.Tensor) -> torch.Tensor:
+        # cast only for fused kernels
+        if t.dtype is not torch.bfloat16:
+            t = t.to(torch.bfloat16)
+        return t.contiguous()
 
-            x2 = self.ln2(x)
-            if x2.is_cuda and x2.dtype != torch.bfloat16:
-                x2 = x2.to(torch.bfloat16)
-            x2 = x2.contiguous()
-            x = x + h
-            x = x + self.cmix(x2)
+    def forward(self, x: torch.Tensor, v_first: Optional[torch.Tensor]):
+        # Keep LN in fp32 (more stable), fuse ops in bf16
+        with torch.cuda.amp.autocast(enabled=False):
+            # --- TimeMix branch ---
+            x1 = self.ln1(x.float())                 # LN in fp32
+            x1 = self._to_bf16_contig(x1)            # cast for fused tmix
+            h, v_first = self.tmix(x1, v_first)      # [B,T,C]
+
+            x = x + h                                 # first residual
+
+            # --- ChannelMix branch ---
+            x2 = self.ln2(x.float())                 # LN on UPDATED x
+            x2 = self._to_bf16_contig(x2)            # cast for fused cmix
+            x = x + self.cmix(x2)                    # second residual
+
         return x, v_first
 
 class V7Core(nn.Module):
