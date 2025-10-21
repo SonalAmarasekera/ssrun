@@ -81,20 +81,23 @@ class BiV7Core(nn.Module):
     """Bidirectional wrapper: run forward and reversed, then fuse. Supports Direction Dropout."""
     def __init__(self, args: V7Args, dir_drop_p: float = 0.0):
         super().__init__()
-        self.dir_drop_p = dir_drop_p
+        self.dir_drop_p = float(dir_drop_p)
         self.fwd = V7Core(args)
         self.bwd = V7Core(args)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.training and self.dir_drop_p > 0.0:
-            # sample one direction
-            if torch.rand(()) < self.dir_drop_p:
+            u = torch.rand((), device=x.device)
+            if u < 0.5 * self.dir_drop_p:
+                # forward-only
                 return self.fwd(x)
-            if torch.rand(()) < self.dir_drop_p:
-                xb = torch.flip(x, dims=[1])
+            elif u < self.dir_drop_p:
+                # backward-only
+                xb = torch.flip(x, dims=[1]).contiguous()
                 xb = self.bwd(xb)
-                return torch.flip(xb, dims=[1])
+                return torch.flip(xb, dims=[1]).contiguous()
 
+        # fuse both directions
         xf = self.fwd(x)
         xb = torch.flip(x, dims=[1]).contiguous()
         xb = self.bwd(xb)
