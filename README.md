@@ -16,6 +16,7 @@ Check CUDA and CUDA Toolkit----  \
 nvidia-smi  \
 python -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda)"  \
 which nvcc && nvcc --version  --> if no toolkit--> conda install -c nvidia cuda-toolkit=<cuda_version> -y  \
+**If that doesn't work, use NVIDIA official site instructions**
 
 Set environement variables after toolkit installation----  \
 Check if available: ls -la /usr/local/cuda/include/ | grep bf16  \
