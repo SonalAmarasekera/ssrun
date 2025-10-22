@@ -156,7 +156,82 @@ def autodetect_C(root: str, default_C: int = 1024) -> int:
             pass
     return default_C
 
-# ----------------- main train -----------------
+# ---------- TEACHER HELPERS (Embedding-Loss) ----------
+class SimpleLatentTeacher(nn.Module):
+    """
+    Lightweight teacher that maps DAC latents [B,T,C] -> [B,T,E] (or [B,E] after pooling).
+    Keep it FROZEN (eval mode, no optimizer) so it acts as a teacher.
+    """
+    def __init__(self, in_dim: int, emb_dim: int = 128):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.LayerNorm(in_dim),
+            nn.Linear(in_dim, emb_dim),
+            nn.GELU(),
+            nn.Linear(emb_dim, emb_dim)
+        )
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        # z: [B,T,C] -> [B,T,E]
+        return self.net(z)
+
+def setup_teachers(
+    hp,
+    model_cfg,            # SeparatorV7Config (we use model_cfg.in_dim for latent teacher input size)
+    device: torch.device
+):
+    """
+    Returns (latent_teacher_fn, decode_fn, embed_fn) according to hp.el_mode:
+      - 'latent'  -> (teacher, None, None)
+      - 'decoder' -> (None, decode_fn, embed_fn)
+      - 'none'    -> (None, None, None)
+    NOTE: You can replace the placeholder decoder/embed with your real DAC + SSL models.
+    """
+    latent_teacher_fn = None
+    decode_fn = None
+    embed_fn = None
+
+    if hp.el_mode == "latent":
+        # Instantiate & FREEZE the latent teacher
+        teacher = SimpleLatentTeacher(in_dim=model_cfg.in_dim, emb_dim=getattr(hp, "el_emb_dim", 128)).to(device)
+        teacher.eval()
+        for p in teacher.parameters():
+            p.requires_grad_(False)
+        latent_teacher_fn = teacher
+
+    elif hp.el_mode == "decoder":
+        # ---- Replace these placeholders with your actual DAC decoder + embedding model ----
+        # Example sketch:
+        #
+        # from my_dac_pkg import DAC
+        # from my_ssl_pkg import Wav2VecEmbedder
+        # dac = DAC.load_from_checkpoint("dac_decoder.ckpt").to(device).eval()
+        # ssl = Wav2VecEmbedder.from_pretrained("facebook/wav2vec2-base").to(device).eval()
+        #
+        # def _decode_fn(latents: torch.Tensor) -> torch.Tensor:
+        #     with torch.no_grad():
+        #         wav = dac.decode(latents)       # [B,L] or [B,1,L]
+        #     return wav
+        #
+        # def _embed_fn(wav: torch.Tensor) -> torch.Tensor:
+        #     with torch.no_grad():
+        #         emb = ssl(wav)                  # [B,E] or [B,T',E]
+        #     return emb
+
+        # Placeholders that raise if used without user replacement:
+        def _decode_fn(_):
+            raise RuntimeError("Please provide a real DAC decode_fn for decoder EL mode.")
+        def _embed_fn(_):
+            raise RuntimeError("Please provide a real embedding embed_fn for decoder EL mode.")
+
+        decode_fn = _decode_fn
+        embed_fn  = _embed_fn
+
+    # else: 'none' -> all None
+
+    return latent_teacher_fn, decode_fn, embed_fn
+
+# ----------------- MAIN TRAIN -----------------
 def main():
     set_seed(hp.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
