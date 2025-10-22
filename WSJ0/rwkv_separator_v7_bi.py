@@ -49,7 +49,7 @@ class V7Layer(nn.Module):
 
     def _to_bf16_contig(self, t: torch.Tensor) -> torch.Tensor:
         # cast only for fused kernels
-        if t.dtype is not torch.bfloat16:
+        if t.dtype is not torch.bfloat16 and t.is_cuda:
             t = t.to(torch.bfloat16)
         return t.contiguous()
 
