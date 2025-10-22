@@ -121,14 +121,14 @@ class RWKVv7Separator(nn.Module):
         super().__init__()
         C = cfg.in_dim
         if cfg.hidden_dim is None:
-            # nearest multiple of head_size_a (at least C//2)
             Happrox = max(C // 2, cfg.head_size_a)
             H = int(round(Happrox / cfg.head_size_a) * cfg.head_size_a)
         else:
             H = cfg.hidden_dim
-            if H % cfg.head_size_a != 0:
-                H = (H // cfg.head_size_a) * cfg.head_size_a
-                raise ValueError(f"hidden_dim must be multiple of head_size_a ({cfg.head_size_a}). Got {cfg.hidden_dim}")
+            # auto-round up to the next multiple (safer for kernels)
+            m = cfg.head_size_a
+            if H % m != 0:
+                H = ((H + m - 1) // m) * m
 
         self.cfg = cfg
         self.down = nn.Linear(C, H)
