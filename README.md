@@ -18,7 +18,8 @@ python -c "import torch; print('torch', torch.__version__, 'cuda', torch.version
 which nvcc && nvcc --version  --> if no toolkit--> conda install -c nvidia cuda-toolkit=<cuda_version> -y
 
 Set environement variables after toolkit installation----
-export CUDA_HOME="$CONDA_PREFIX"
-export PATH="$CUDA_HOME/bin:$PATH"
-export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+export CUDA_HOME=/usr/local/cuda
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+export CPATH=$CUDA_HOME/include:$CPATH
 
