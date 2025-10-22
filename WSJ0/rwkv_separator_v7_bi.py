@@ -67,7 +67,7 @@ class V7Layer(nn.Module):
 
     def forward(self, x: torch.Tensor, v_first: Optional[torch.Tensor]) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         # Keep LN in fp32 for stability. Cast to bf16 only at fused TimeMix/ChannelMix boundaries.
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.amp.autocast("cuda"):
             # --- TimeMix ---
             x1 = self.ln1(x.float())
             x1 = self._to_bf16_contig(x1)
@@ -212,7 +212,7 @@ class RWKVv7Separator(nn.Module):
 
         # Core (bf16 activations if CUDA), LN kept fp32 inside V7Layer
         if self.cfg.enforce_bf16 and x.is_cuda:
-            with torch.cuda.amp.autocast(enabled=True, dtype=torch.bfloat16):
+            with torch.amp.autocast("cuda", dtype=torch.bfloat16):
                 h = self.core(x)
         else:
             h = self.core(x)
