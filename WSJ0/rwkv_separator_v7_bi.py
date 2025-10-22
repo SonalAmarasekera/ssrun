@@ -166,7 +166,6 @@ class RWKVv7Separator(nn.Module):
 
         # Heads
         head_hidden = max(128, C // 2)
-        act = SimpleSnake(1.0)
         self.head_r1 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), SimpleSnake(1.0), nn.Linear(head_hidden, C))
         self.head_r2 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), SimpleSnake(1.0), nn.Linear(head_hidden, C))
         if cfg.use_mask:
@@ -214,9 +213,13 @@ class RWKVv7Separator(nn.Module):
 
         r1 = self.head_r1(h)
         r2 = self.head_r2(h)
-        if self.head_m1 is not None:
-            m1 = torch.sigmoid(self.head_m1(h))
-            m2 = torch.sigmoid(self.head_m2(h))
+#        if self.head_m1 is not None:
+#           m1 = torch.sigmoid(self.head_m1(h))
+#           m2 = torch.sigmoid(self.head_m2(h))
+        if self.head_m is not None:
+            logits = self.head_m(h).view(B, T, C, 2)
+            m = logits.softmax(dim=-1)
+            m1, m2 = m[...,0], m[...,1]
             y1 = m1 * z_mix + r1
             y2 = m2 * z_mix + r2
             return {"pred1": y1, "pred2": y2, "mask1": m1, "mask2": m2, "resid1": r1, "resid2": r2}
