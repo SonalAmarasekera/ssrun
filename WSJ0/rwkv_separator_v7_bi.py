@@ -15,22 +15,22 @@ from RWKV.RWKV_v7.train_temp.src.model import RWKV_Tmix_x070, RWKV_CMix_x070
 @dataclass
 class V7Args:
     # minimal arg set required by RWKV_Tmix_x070 / RWKV_CMix_x070
-    n_embd: int
-    n_layer: int
-    dim_att: int
+    n_embd: int                            # DAC latent dim=1024
+    n_layer: int                           # Number of stacked V7 layers
+    dim_att: int                           # Timemix dimensionality (Data dimension inside separator)
     head_size_a: int
     my_testing: str = "x070"               # ensure x070 logic
     head_size_divisor: int = 64            # used in some inits (keep default-compatible)
     pre_ffn: int = 0
-    my_pos_emb: int = 0
+    my_pos_emb: int = 0                    # Positional encoding (disabled as v7 handles temporal mixing internally)
 
 @dataclass
 class SeparatorV7Config:
-    in_dim: int
-    layers: int = 6
+    in_dim: int                            # Latent channel dimension=1024 
+    layers: int = 6                        # Number of RWKV blocks
     head_size_a: int = 64                  # must divide hidden_dim
     hidden_dim: Optional[int] = None       # if None, auto-adjust to nearest multiple of head_size_a
-    dropout: float = 0.0                   # handled inside v7 blocks via author's design
+    dropout: float = 0.0                   # Generic dropout; handled inside v7 blocks via author's design
     dir_drop_p: float = 0.0                # direction dropout in Bi wrapper
     use_mask: bool = True                  # mask+residual heads
     enforce_bf16: bool = True              # cast activations to bf16 for kernel path
