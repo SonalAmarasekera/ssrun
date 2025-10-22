@@ -145,12 +145,12 @@ class RWKVv7Separator(nn.Module):
 
         self.core = BiV7Core(v7args, dir_drop_p=cfg.dir_drop_p)
         # after creating self.core in RWKVv7Separator.__init__
-        if self.cfg.enforce_bf16 and torch.cuda.is_available():
-            self.core = self.core.to(torch.bfloat16)    # cast Tmix/CMix LNs & linears to bf16
+#       if self.cfg.enforce_bf16 and torch.cuda.is_available():
+#           self.core = self.core.to(torch.bfloat16)    # cast Tmix/CMix LNs & linears to bf16
             # ensure downstream-created LNs/Linears are also bf16
-            for m in self.core.modules():
-                if isinstance(m, (nn.LayerNorm, nn.Linear)):
-                    m.to(torch.bfloat16)
+#           for m in self.core.modules():
+#               if isinstance(m, (nn.LayerNorm, nn.Linear)):
+#                   m.to(torch.bfloat16)
 
         self.up = nn.Linear(H, C)
 
