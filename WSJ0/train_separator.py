@@ -62,10 +62,9 @@ class HParams:
     lambda_mask_entropy: float = 0.0
 
     # ---- Embedding-Loss (CodecFormer-EL style) ----
-    # 'none' | 'latent' | 'decoder'
-    el_mode: str = "none"
-    lambda_el: float = 0.0
-    el_cosine: bool = True
+    el_mode: str = "none"                # options: 'none' | 'latent' | 'decoder'
+    lambda_el: float = 0.0               # scaling factor for the embedding loss
+    el_cosine: bool = True               # cosine or L2 similarity
 
     # misc
     seed: int = 123
