@@ -110,6 +110,16 @@ class BiV7Core(nn.Module):
         xb = torch.flip(xb, dims=[1]).contiguous()
         return 0.5 * (xf + xb)
 
+# ------------------------ Helpers ------------------------
+
+class SimpleSnake(nn.Module):
+    def __init__(self, alpha=1.0):
+        super().__init__()
+        self.alpha = nn.Parameter(torch.ones(1) * alpha)
+
+    def forward(self, x):
+        return x + (1.0 / self.alpha) * torch.sin(self.alpha * x) ** 2
+
 # ----------------------- Separator -----------------------
 
 class RWKVv7Separator(nn.Module):
@@ -141,7 +151,7 @@ class RWKVv7Separator(nn.Module):
             my_testing="x070"
         )
         # Ensure env toggles
-        os.environ.setdefault("RWKV_MY_TESTING", "x070")
+#       os.environ.setdefault("RWKV_MY_TESTING", "x070")
 
         self.core = BiV7Core(v7args, dir_drop_p=cfg.dir_drop_p)
         # after creating self.core in RWKVv7Separator.__init__
@@ -155,14 +165,17 @@ class RWKVv7Separator(nn.Module):
         self.up = nn.Linear(H, C)
 
         # Heads
-        head_hidden = max(64, C)
-        self.head_r1 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), nn.GELU(), nn.Linear(head_hidden, C))
-        self.head_r2 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), nn.GELU(), nn.Linear(head_hidden, C))
+        head_hidden = max(128, C // 2)
+        act = SimpleSnake(1.0)
+        self.head_r1 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), SimpleSnake(1.0), nn.Linear(head_hidden, C))
+        self.head_r2 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), SimpleSnake(1.0), nn.Linear(head_hidden, C))
         if cfg.use_mask:
-            self.head_m1 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, C))
-            self.head_m2 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, C))
+            self.head_m = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, 2*C))
+#           self.head_m1 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, C))
+#           self.head_m2 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, C))
         else:
-            self.head_m1 = self.head_m2 = None
+            self.head_m = None
+#           self.head_m1 = self.head_m2 = None
 
     def forward(self, z_mix: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
