@@ -52,10 +52,10 @@ class HParams:
     lambda_residual_l2: float = 1e-4
     lambda_mask_entropy: float = 0.0
     # embedding-loss (EL) knobs
-    el_mode: str = "none"        # "none", "latent", or "decoder"
-    lambda_el: float = 0.0
+    el_mode: str = "none"        # options: "none", "latent", or "decoder"
+    lambda_el: float = 0.0       # "0.1-0.4" for <latent and decoder>, "0.0" for <none>
     el_cosine: bool = True       # cosine vs L2
-    el_emb_dim: int = 128
+    el_emb_dim: int = 128        
     # misc
     seed: int = 123
     log_every: int = 100
