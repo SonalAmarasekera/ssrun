@@ -120,7 +120,7 @@ class BiV7Core(nn.Module):
 
 # ------------------------ Heads ------------------------
 
-class SnakeAct(nn.Module):
+class SimpleSnake(nn.Module):
     """Scalar-parameterized Snake for [B,T,C] tensors (matches Codec/DAC-style nonlinearity)."""
     def __init__(self, alpha: float = 1.0):
         super().__init__()
@@ -176,7 +176,7 @@ class RWKVv7Separator(nn.Module):
 
         # Heads (residual + mask)
         head_hidden = max(128, C // 2)
-        act = SnakeAct(1.0)
+        act = SimpleSnake(1.0)
         self.head_r1 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), act, nn.Linear(head_hidden, C))
         self.head_r2 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), act, nn.Linear(head_hidden, C))
 
