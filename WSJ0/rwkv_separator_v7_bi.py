@@ -212,7 +212,7 @@ class RWKVv7Separator(nn.Module):
 
         # Core (bf16 activations if CUDA), LN kept fp32 inside V7Layer
         if self.cfg.enforce_bf16 and x.is_cuda:
-            with torch.cuda.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+            with torch.cuda.amp.autocast("cuda", dtype=torch.bfloat16):
                 h = self.core(x)
         else:
             h = self.core(x)
