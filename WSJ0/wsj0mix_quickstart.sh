@@ -3,7 +3,6 @@
 # WSJ0 root data download and move
 pip install kagglehub
 python wsj0mix_kagglehub.py
-#mv /root/.cache/kagglehub/datasets/sonishmaharjan555/wsj0-2mix/versions/2 /content/
 
 # Cloning the needed repos
 git clone https://github.com/mpariente/pywsj0-mix.git
