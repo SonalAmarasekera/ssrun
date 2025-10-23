@@ -73,7 +73,12 @@ if 'x070' in os.environ["RWKV_MY_TESTING"]:
             return t.contiguous()
             
         #Kernel itself changes to a different datatype to conserve accuracy maybe, this is a quick fix
-        q, w, k, v, a, b = map(_bf16_contig, (q, w, k, v, a, b))
+        q = q.to(torch.bfloat16)
+        w = w.to(torch.bfloat16)
+        k = k.to(torch.bfloat16)
+        v = v.to(torch.bfloat16)
+        a = a.to(torch.bfloat16)
+        b = b.to(torch.bfloat16)
 
         B,T,HC = q.shape
         q,w,k,v,a,b = [i.view(B,T,HC//64,64) for i in [q,w,k,v,a,b]]
