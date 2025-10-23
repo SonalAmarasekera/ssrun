@@ -61,7 +61,7 @@ def pit_latent_mse_2spk(
     L_21 = _masked_mse(y1, tgt2, pad_mask) + _masked_mse(y2, tgt1, pad_mask)
     perm = (0, 1) if L_12 <= L_21 else (1, 0)
     pit = torch.minimum(L_12, L_21)
-    extras = {"L_12": L_12.detach(), "L_21": L_21.detach()}
+    extras = {"L_1122": L_12.detach(), "L_1221": L_21.detach()}
     return pit, perm, extras
 
 def _reorder_two(y1: torch.Tensor, y2: torch.Tensor, perm: Tuple[int, int]) -> Tuple[torch.Tensor, torch.Tensor]:
