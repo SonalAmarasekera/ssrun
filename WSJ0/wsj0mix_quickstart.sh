@@ -14,6 +14,9 @@ git clone https://github.com/descriptinc/descript-audio-codec.git
 pip install ninja wandb pandas scipy numpy
 pip install git+https://github.com/descriptinc/descript-audio-codec
 
+# Rename DAC repo for easy access
+mv descript-audio-codec DAC
+
 #Moving to RWKV directory and installing dependencies
 cd RWKV-LM/RWKV-v7/train_temp
 rm -f src/model.py
