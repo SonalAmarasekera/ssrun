@@ -92,7 +92,7 @@ class V7Layer(nn.Module):
         x2 = self.ln2(x.float())
         x2 = self._to_bf16_contig(x2)
 
-        with torch.cuda.amp.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_cuda):
+        with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_cuda):
             x = x + self.cmix(x2)
 
         return x, v_first
