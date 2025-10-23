@@ -1,5 +1,6 @@
 ########################################################################################################
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
+# Edited to match the RWKV Separation Model
 ########################################################################################################
 
 import os, math, gc, importlib
@@ -66,6 +67,7 @@ if 'x070' in os.environ["RWKV_MY_TESTING"]:
             return dw,dq,dk,dv,dz,db
 
     def RUN_CUDA_RWKV7g(q,w,k,v,a,b):
+        b = b.to(torch.bfloat16) #Kernel itself changes to a different to conserve accuracy maybe, this is a quick fix
         B,T,HC = q.shape
         q,w,k,v,a,b = [i.view(B,T,HC//64,64) for i in [q,w,k,v,a,b]]
         return WindBackstepping.apply(w,q,k,v,a,b).view(B,T,HC)
