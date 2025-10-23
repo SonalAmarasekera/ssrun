@@ -67,18 +67,8 @@ if 'x070' in os.environ["RWKV_MY_TESTING"]:
             return dw,dq,dk,dv,dz,db
 
     def RUN_CUDA_RWKV7g(q,w,k,v,a,b):
-        def _bf16_contig(t):
-            if t.dtype is not torch.bfloat16:
-                t = t.to(torch.bfloat16)
-            return t.contiguous()
-            
         #Kernel itself changes to a different datatype to conserve accuracy maybe, this is a quick fix
-        q = q.to(torch.bfloat16)
-        w = w.to(torch.bfloat16)
-        k = k.to(torch.bfloat16)
-        v = v.to(torch.bfloat16)
-        a = a.to(torch.bfloat16)
-        b = b.to(torch.bfloat16)
+        q,w,k,v,a,b = [i.to(torch.bfloat16) for i in [q,w,k,v,a,b]]
 
         B,T,HC = q.shape
         q,w,k,v,a,b = [i.view(B,T,HC//64,64) for i in [q,w,k,v,a,b]]
