@@ -8,6 +8,7 @@ python wsj0mix_kagglehub.py
 # Cloning the needed repos
 git clone https://github.com/mpariente/pywsj0-mix.git
 git clone https://github.com/BlinkDL/RWKV-LM.git
+git clone https://github.com/descriptinc/descript-audio-codec.git
 
 # Required packages
 pip install ninja wandb pandas scipy numpy
