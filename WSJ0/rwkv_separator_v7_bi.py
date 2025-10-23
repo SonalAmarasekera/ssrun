@@ -46,37 +46,53 @@ class SeparatorV7Config:
     enforce_bf16: bool = True          # activations in bf16 at fused ops
 
 # ----------------------- Layers -----------------------
-
 class V7Layer(nn.Module):
     """One x070 layer: PreLN -> TimeMix -> +res -> PreLN -> ChannelMix -> +res, with v_first plumbing."""
-    def __init__(self, args: V7Args, layer_id: int):
+
+    def __init__(self, args, layer_id: int):
         super().__init__()
         self.args = args
         self.layer_id = layer_id
-        self.ln1 = nn.LayerNorm(args.n_embd)      # params kept in fp32
+
+        # Keep LN weights in fp32 for numerical stability
+        self.ln1 = nn.LayerNorm(args.n_embd)
         self.ln2 = nn.LayerNorm(args.n_embd)
+
         self.tmix = RWKV_Tmix_x070(args, layer_id)
         self.cmix = RWKV_CMix_x070(args, layer_id)
 
     @staticmethod
     def _to_bf16_contig(t: torch.Tensor) -> torch.Tensor:
-        # Cast to bf16 only for the fused kernels; keep contiguous for CUDA.
-        if t.is_cuda and t.dtype is not torch.bfloat16:
+        """Ensure tensor is bf16 and contiguous (required for fused CUDA kernels)."""
+        if t.is_cuda and t.dtype != torch.bfloat16:
             t = t.to(torch.bfloat16)
         return t.contiguous()
 
     def forward(self, x: torch.Tensor, v_first: Optional[torch.Tensor]) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        # Keep LN in fp32 for stability. Cast to bf16 only at fused TimeMix/ChannelMix boundaries.
-        with torch.amp.autocast("cuda"):
-            # --- TimeMix ---
-            x1 = self.ln1(x.float())
-            x1 = self._to_bf16_contig(x1)
-            h, v_first = self.tmix(x1, v_first)   # [B,T,C]
-            x = x + h
+        """
+        Forward pass for a single RWKV-v7 layer.
+        - Keeps LN in fp32.
+        - Ensures TimeMix and ChannelMix receive bf16 tensors.
+        - Prevents mixed-precision mismatch for CUDA kernel inputs (w,q,k,v,z,b).
+        """
+        use_cuda = x.is_cuda
 
-            # --- ChannelMix ---
-            x2 = self.ln2(x.float())
-            x2 = self._to_bf16_contig(x2)
+        # --- TimeMix ---
+        # LayerNorm in fp32 for stability
+        x1 = self.ln1(x.float())
+        # Convert to bf16 before feeding to fused kernel
+        x1 = self._to_bf16_contig(x1)
+
+        # Run TimeMix in bf16 (disable autocast interference)
+        with torch.cuda.amp.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_cuda):
+            h, v_first = self.tmix(x1, v_first)
+        x = x + h  # residual connection
+
+        # --- ChannelMix ---
+        x2 = self.ln2(x.float())
+        x2 = self._to_bf16_contig(x2)
+
+        with torch.cuda.amp.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_cuda):
             x = x + self.cmix(x2)
 
         return x, v_first
