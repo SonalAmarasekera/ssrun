@@ -237,7 +237,7 @@ class RWKVv7Separator(nn.Module):
 
         # Core: enforce bf16 autocast ONLY for the kernel path (LN stays fp32 inside V7Layer)
         if self.cfg.enforce_bf16 and x.is_cuda:
-            with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+            with torch.amp.autocast("cuda", dtype=torch.bfloat16):
                 h = self.core(x)                      # [B, T_pad, H]
         else:
             h = self.core(x)
