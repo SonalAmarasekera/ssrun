@@ -7,6 +7,7 @@ from functools import partial
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 # --- RWKV v7 CUDA settings (must be set before importing RWKV model) ---
 os.environ.setdefault("RWKV_JIT_ON", "1")
@@ -195,32 +196,46 @@ def main():
     # teacher setup
     latent_teacher, decode_fn, embed_fn = setup_teachers(hp, cfg, device)
 
-    # training loop
+    # Training
     global_step = 0
-    total_steps = hp.epochs * len(train_loader)
+    steps_per_epoch = len(train_loader)
+    total_steps = hp.epochs * steps_per_epoch
+    scaler = None  # bf16 autocast path uses no scaler
 
     for epoch in range(hp.epochs):
         model.train()
-        for batch in train_loader:
-            for k in ("z_mix", "z_s1", "z_s2", "mask"):
+        # running averages for the epoch
+        run_loss = 0.0
+        run_pit  = 0.0
+        prog = tqdm(train_loader, total=steps_per_epoch, desc=f"Epoch {epoch+1}/{hp.epochs}", leave=True)
+
+        for step_in_epoch, batch in enumerate(prog):
+            # Move to device & crop
+            for k in ("z_mix","z_s1","z_s2","mask","sr"):
                 if k in batch and torch.is_tensor(batch[k]):
                     batch[k] = batch[k].to(device, non_blocking=True)
 
-            batch = crop_batch_to_seconds(batch, hp.seg_seconds, hp.latent_fps)
-            z_mix, z_s1, z_s2, mask = batch["z_mix"], batch["z_s1"], batch["z_s2"], batch["mask"]
+            # NOTE: if you’re padding to CHUNK_LEN inside the model, keep crop chunk_len=None here
+            batch = crop_batch_to_seconds(batch, hp.seg_seconds, hp.latent_fps, chunk_len=None)
 
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=(device.type=="cuda" and hp.enforce_bf16)):
+            z_mix, z_s1, z_s2, mask = batch["z_mix"], batch["z_s1"], batch["z_s2"], batch["mask"]
+            B,T,C = z_mix.shape
+
+            # forward
+            if device.type == "cuda" and hp.enforce_bf16:
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    out = model(z_mix)
+                    loss, logs, perm = total_separator_loss(
+                        out, z_s1, z_s2, mask,
+                        lambda_residual_l2=hp.lambda_residual_l2,
+                        lambda_mask_entropy=hp.lambda_mask_entropy
+                    )
+            else:
                 out = model(z_mix)
-                loss, logs, _ = total_separator_loss(
+                loss, logs, perm = total_separator_loss(
                     out, z_s1, z_s2, mask,
                     lambda_residual_l2=hp.lambda_residual_l2,
-                    lambda_mask_entropy=hp.lambda_mask_entropy,
-                    el_mode=hp.el_mode,
-                    lambda_el=hp.lambda_el,
-                    el_cosine=hp.el_cosine,
-                    latent_teacher=latent_teacher,
-                    decode_fn=decode_fn,
-                    embed_fn=embed_fn,
+                    lambda_mask_entropy=hp.lambda_mask_entropy
                 )
 
             opt.zero_grad(set_to_none=True)
@@ -229,32 +244,42 @@ def main():
             opt.step()
             ema.update(model)
 
+            # LR schedule (still by global step)
             lr_now = cosine_lr(global_step, total_steps, hp.lr, hp.cosine_min_lr_ratio)
             for pg in opt.param_groups:
                 pg["lr"] = lr_now
 
-            if global_step % hp.log_every == 0:
-                print(f"step {global_step:6d} | lr {lr_now:.2e} | "
-                      f"loss {logs['loss/total']:.4f} | pit {logs['loss/pit_latent']:.4f} "
-                      f"| L12 {logs['L_12']:.4f} L21 {logs['L_21']:.4f}")
-
-            if global_step % hp.val_every_steps == 0 and global_step > 0:
-                val_loss = evaluate(model, val_loader, device, latent_teacher, decode_fn, embed_fn)
-                ema.store(model); ema.copy_to(model)
-                val_loss_ema = evaluate(model, val_loader, device, latent_teacher, decode_fn, embed_fn)
-                model.load_state_dict(ema.backup)
-                ckpt = Path(hp.ckpt_dir) / f"ckpt_step{global_step}_val{val_loss:.4f}_valEMA{val_loss_ema:.4f}.pt"
-                torch.save({"step": global_step, "model": model.state_dict(),
-                            "ema": ema.shadow, "hp": asdict(hp)}, ckpt)
-                print(f"[ckpt] step {global_step} saved")
+            # update running meters & progress bar every step
+            run_loss += float(logs["loss/total"])
+            run_pit  += float(logs["loss/pit_latent"])
+            avg_loss = run_loss / (step_in_epoch + 1)
+            avg_pit  = run_pit  / (step_in_epoch + 1)
+            prog.set_postfix(lr=f"{lr_now:.2e}", loss=f"{avg_loss:.4f}", pit=f"{avg_pit:.4f}")
 
             global_step += 1
 
-    ema.store(model); ema.copy_to(model)
-    torch.save({"step": global_step, "model": model.state_dict(),
-                "ema": ema.shadow, "hp": asdict(hp)},
-               Path(hp.ckpt_dir) / "final_ema.pt")
-    print("Training complete.")
+        # ----- end of epoch: print summary, run full validation, save ckpt -----
+        epoch_train_loss = run_loss / max(1, steps_per_epoch)
+        epoch_train_pit  = run_pit  / max(1, steps_per_epoch)
+        print(f"[epoch {epoch+1}] train_loss {epoch_train_loss:.4f} | train_pit {epoch_train_pit:.4f}")
+
+        # Standard validation
+        val_loss = evaluate(model, val_loader, device)
+
+        # EMA validation
+        ema.store(model)
+        ema.copy_to(model)
+        val_loss_ema = evaluate(model, val_loader, device)
+        model.load_state_dict(ema.backup)
+
+        # Save epoch checkpoint
+        ckpt_path = Path(hp.ckpt_dir) / f"epoch{epoch+1:03d}_val{val_loss:.4f}_valEMA{val_loss_ema:.4f}.pt"
+        torch.save(
+            {"epoch": epoch + 1, "step": global_step, "model": model.state_dict(),
+             "ema": ema.shadow, "hp": asdict(hp)},
+            ckpt_path
+        )
+        print(f"[ckpt] saved {ckpt_path}")
 
 @torch.no_grad()
 def evaluate(model, loader, device, latent_teacher, decode_fn, embed_fn):
