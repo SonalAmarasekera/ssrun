@@ -81,7 +81,7 @@ class RWKV_Tmix_x070(MyModule):
         self.layer_id = layer_id
         self.my_testing = args.my_testing
 
-        self.head_size = args.head_size
+        self.head_size = args.head_size_a
         self.n_head = args.dim_att // self.head_size
         assert args.dim_att % self.n_head == 0
         H = self.n_head
