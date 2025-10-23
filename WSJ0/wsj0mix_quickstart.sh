@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # WSJ0 root data download and move
 pip install kagglehub
@@ -43,3 +44,8 @@ python make_csv.py --root /workspace/2speakers/wav16k/min/tt --out test_min.csv
 #python make_csv.py --root /workspace/2speakers/wav16k/max/tr --out train_max.csv
 #python make_csv.py --root /workspace/2speakers/wav16k/max/cv --out dev_max.csv
 #python make_csv.py --root /workspace/2speakers/wav16k/max/tt --out test_max.csv
+
+# Connecting the latent generating files
+chmod +x gen_latents.sh
+
+./gen_latents.sh
