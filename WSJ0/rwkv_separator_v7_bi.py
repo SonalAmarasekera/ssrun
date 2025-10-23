@@ -84,7 +84,7 @@ class V7Layer(nn.Module):
         x1 = self._to_bf16_contig(x1)
 
         # Run TimeMix in bf16 (disable autocast interference)
-        with torch.cuda.amp.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_cuda):
+        with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_cuda):
             h, v_first = self.tmix(x1, v_first)
         x = x + h  # residual connection
 
