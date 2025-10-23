@@ -223,37 +223,49 @@ class RWKVv7Separator(nn.Module):
         Returns dict with pred1, pred2, and optionally mask1/2 + resid1/2.
         """
         assert z_mix.dim() == 3, f"Expected [B,T,C], got {tuple(z_mix.shape)}"
-        B, T, C = z_mix.shape
+        B, T0, C = z_mix.shape
         assert C == self.in_dim, f"Input C={C} != configured C={self.in_dim}. Re-cache or reconfigure."
 
-        # Down-project
-        x = self.down(z_mix)
-        x = self._pre_core_cast(x)
+        # Down-project to hidden (H). Keep kernel contract: H % head_size_a == 0
+        x = self.down(z_mix)                          # [B, T0, H]
+        x = self._pre_core_cast(x)                    # if you keep bf16 activations for the core
+        H = x.shape[-1]
+        assert (H % self.cfg.head_size_a) == 0, f"HC={H} not divisible by head_size_a={self.cfg.head_size_a}"
 
-        # Sanity for kernel: hid_dim must be multiple of head_size_a
-        HC = x.shape[-1]
-        assert (HC % self.cfg.head_size_a) == 0, f"HC={HC} not divisible by head_size_a={self.cfg.head_size_a}"
+        # Pad T up to CHUNK_LEN=16 for the fused kernel, then run the core
+        x = pad_to_chunk(x, chunk_len=16)             # -> [B, T_pad, H], T_pad >= T0 and T_pad % 16 == 0
 
-        x = pad_to_chunk(x, 16)
-        # Core (bf16 activations if CUDA), LN kept fp32 inside V7Layer
+        # Core: enforce bf16 autocast ONLY for the kernel path (LN stays fp32 inside V7Layer)
         if self.cfg.enforce_bf16 and x.is_cuda:
-            with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                h = self.core(x)
+            with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+                h = self.core(x)                      # [B, T_pad, H]
         else:
             h = self.core(x)
 
-        # Up-project (compute likely happens in the autocast dtype)
-        h = self.up(h)
+        # Trim back to the original time length BEFORE heads / up-proj
+        if h.size(1) != T0:
+            h = h[:, :T0, :].contiguous()             # [B, T0, H]
 
-        # Residual heads
-        r1 = self.head_r1(h)
-        r2 = self.head_r2(h)
+        # Up-project back to codec latent dim C
+        h = self.up(h)                                # [B, T0, C]
 
-        if self.use_mask:
-            # [B,T,2C] -> [B,T,C,2] -> softmax over 2
-            logits = self.head_m(h).reshape(B, T, C, 2)
-            m = torch.softmax(logits, dim=-1)
-            m1, m2 = m[..., 0], m[..., 1]
+        # (Optional) align dtype with input for residual math
+        if h.dtype != z_mix.dtype:
+            h = h.to(z_mix.dtype)
+
+        # Residual heads (two streams)
+        r1 = self.head_r1(h)                          # [B, T0, C]
+        r2 = self.head_r2(h)                          # [B, T0, C]
+
+        # Masked or maskless fusion
+        if getattr(self.cfg, "use_mask", False):      # prefer reading the flag from cfg
+            # Produce 2*C logits, reshape to [B,T0,C,2], and softmax over the 2 sources
+            logits = self.head_m(h).contiguous()      # [B, T0, 2*C]
+            # Use view with runtime-checked sizes to avoid element-count mismatches
+            logits = logits.view(B, T0, C, 2)
+            m = torch.softmax(logits, dim=-1)         # [B, T0, C, 2]
+            m1, m2 = m[..., 0], m[..., 1]             # each [B, T0, C]
+
             y1 = m1 * z_mix + r1
             y2 = m2 * z_mix + r2
             return {
@@ -268,7 +280,6 @@ class RWKVv7Separator(nn.Module):
                 "pred1": y1, "pred2": y2,
                 "resid1": r1, "resid2": r2,
             }
-
 # ----------------------- Smoke test -----------------------
 if __name__ == "__main__":
     os.environ.setdefault("RWKV_MY_TESTING", "x070")
