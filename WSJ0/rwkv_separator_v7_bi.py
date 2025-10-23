@@ -146,6 +146,14 @@ class SimpleSnake(nn.Module):
         a = self.alpha + 1e-9
         return x + (1.0 / a) * torch.sin(a * x) ** 2
 
+# ---------------------- Helper --------------------------
+def pad_to_chunk(x, chunk_len=16):
+    B, T, C = x.shape
+    pad = (chunk_len - (T % chunk_len)) % chunk_len
+    if pad > 0:
+        pad_tensor = torch.zeros(B, pad, C, dtype=x.dtype, device=x.device)
+        x = torch.cat([x, pad_tensor], dim=1)
+    return x
 # ----------------------- Separator -----------------------
 
 class RWKVv7Separator(nn.Module):
@@ -226,6 +234,7 @@ class RWKVv7Separator(nn.Module):
         HC = x.shape[-1]
         assert (HC % self.cfg.head_size_a) == 0, f"HC={HC} not divisible by head_size_a={self.cfg.head_size_a}"
 
+        x = pad_to_chunk(x, 16)
         # Core (bf16 activations if CUDA), LN kept fp32 inside V7Layer
         if self.cfg.enforce_bf16 and x.is_cuda:
             with torch.amp.autocast("cuda", dtype=torch.bfloat16):
