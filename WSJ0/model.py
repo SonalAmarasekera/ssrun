@@ -36,7 +36,7 @@ if os.environ["RWKV_JIT_ON"] == "1":
 
 from torch.utils.cpp_extension import load
 
-HEAD_SIZE = int(os.environ["RWKV_HEAD_SIZE"])
+HEAD_SIZE = int(os.environ["RWKV_HEAD_SIZE_A"])
 
 if 'x070' in os.environ["RWKV_MY_TESTING"]:
     CHUNK_LEN = 16
