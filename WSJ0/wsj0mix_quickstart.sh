@@ -50,7 +50,7 @@ python make_csv.py --root /workspace/2speakers/wav16k/min/tt --out test_min.csv
 #python make_csv.py --root /workspace/2speakers/wav16k/max/tt --out test_max.csv
 
 # Installing additional modules
-conda install -c conda-forge triton
+conda install -c pytorch torchtriton
 
 # Connecting the latent generating files
 chmod +x gen_latents.sh
