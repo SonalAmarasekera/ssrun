@@ -7,19 +7,7 @@ from typing import Optional, Dict, Tuple
 import torch
 import torch.nn as nn
 
-# --- Import official RWKV-v7 components (preferred path from the author).
-#     Fallback to a local module name if your project lays it out differently.
-try:
-    from RWKV.RWKV_v7.train_temp.src.model import RWKV_Tmix_x070, RWKV_CMix_x070
-except Exception as e:
-    try:
-        # local fallback (adjust if your local filename differs)
-        from rwkv_orig_model import RWKV_Tmix_x070, RWKV_CMix_x070  # noqa: F401
-    except Exception as e2:
-        raise ImportError(
-            "Unable to import RWKV_Tmix_x070 / RWKV_CMix_x070 from the official repo or local fallback.\n"
-            "Make sure the RWKV-v7 (x070) source is available in PYTHONPATH."
-        ) from e
+from RWKV.RWKV_v7.train_temp.src.model import RWKV_Tmix_x070, RWKV_CMix_x070
 
 # ----------------------- Configs -----------------------
 
