@@ -1,4 +1,4 @@
-# rwkv_separator_v7_bi.py
+# rwkv_separator_v7_bi_codecformer.py
 from __future__ import annotations
 import os
 from dataclasses import dataclass
@@ -30,7 +30,7 @@ class SeparatorV7Config:
     head_size_a: int = 64
     hidden_dim: Optional[int] = None   # auto -> round to multiple of head_size_a
     dir_drop_p: float = 0.0            # direction dropout prob
-    use_mask: bool = True              # mask + residual heads
+    num_spks: int = 2                   # number of speakers
     enforce_bf16: bool = True          # activations in bf16 at fused ops
 
 # ----------------------- Layers -----------------------
@@ -142,12 +142,13 @@ def pad_to_chunk(x, chunk_len=16):
         pad_tensor = torch.zeros(B, pad, C, dtype=x.dtype, device=x.device)
         x = torch.cat([x, pad_tensor], dim=1)
     return x
+
 # ----------------------- Separator -----------------------
 
 class RWKVv7Separator(nn.Module):
     """
-    Conv1x1 down (C -> H) -> Bi V7 core (L layers) -> Conv1x1 up (H -> C) -> 2 heads (mask+resid).
-    H is adjusted so that H % head_size_a == 0 (required by v7 kernels).
+    CodecFormer-style separation with RWKV-v7 backbone.
+    Conv1x1 down (C -> H) -> Bi V7 core (L layers) -> Conv1x1 up (H -> C) -> Gated separation heads.
     """
     def __init__(self, cfg: SeparatorV7Config):
         super().__init__()
@@ -170,6 +171,7 @@ class RWKVv7Separator(nn.Module):
         self.cfg = cfg
         self.in_dim = C
         self.hid_dim = H
+        self.num_spks = cfg.num_spks
 
         # 1x1 conv over channels = Linear
         self.down = nn.Linear(C, H)
@@ -186,18 +188,28 @@ class RWKVv7Separator(nn.Module):
 
         self.up = nn.Linear(H, C)
 
-        # Heads (residual + mask)
-        head_hidden = max(128, C // 2)
-        act = SimpleSnake(1.0)
-        self.head_r1 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), act, nn.Linear(head_hidden, C))
-        self.head_r2 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), act, nn.Linear(head_hidden, C))
-
-        self.use_mask = bool(cfg.use_mask)
-        if self.use_mask:
-            # Predict per-source logits then softmax over the 2-class "source" axis
-            self.head_m = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, 2 * C))
-        else:
-            self.head_m = None
+        # CodecFormer-style gated separation heads
+        # Initial projection to speaker-specific feature bases
+        self.masker = nn.Conv1d(C, C * self.num_spks, 1, bias=False)
+        nn.utils.weight_norm(self.masker)
+        
+        # Gated output components (per speaker)
+        self.output_heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv1d(C, C, 1, bias=False),
+                SimpleSnake(1.0)
+            ) for _ in range(self.num_spks)
+        ])
+        
+        self.output_gate_heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv1d(C, C, 1, bias=False),
+                nn.Sigmoid()
+            ) for _ in range(self.num_spks)
+        ])
+        
+        # Final activation
+        self.activation = SimpleSnake(1.0)
 
     def _pre_core_cast(self, x: torch.Tensor) -> torch.Tensor:
         # The fused kernels are optimized for bf16 on CUDA. Cast activations (not params).
@@ -208,7 +220,7 @@ class RWKVv7Separator(nn.Module):
     def forward(self, z_mix: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
         z_mix: [B,T,C] float{32|16|bf16}
-        Returns dict with pred1, pred2, and optionally mask1/2 + resid1/2.
+        Returns dict with separated sources in CodecFormer style.
         """
         assert z_mix.dim() == 3, f"Expected [B,T,C], got {tuple(z_mix.shape)}"
         B, T0, C = z_mix.shape
@@ -241,40 +253,56 @@ class RWKVv7Separator(nn.Module):
         if h.dtype != z_mix.dtype:
             h = h.to(z_mix.dtype)
 
-        # Residual heads (two streams)
-        r1 = self.head_r1(h)                          # [B, T0, C]
-        r2 = self.head_r2(h)                          # [B, T0, C]
+        # CodecFormer-style separation
+        # Convert to [B, C, T] for conv1d operations
+        h_conv = h.transpose(1, 2).contiguous()       # [B, C, T0]
+        
+        # Generate speaker-specific feature bases
+        masks = self.masker(h_conv)                   # [B, C * num_spks, T0]
+        
+        # Reshape for parallel processing across speakers
+        B, CT, L = masks.shape
+        masks = masks.view(B * self.num_spks, -1, L)  # [B * num_spks, C, T0]
+        
+        # Apply gated transformation to all speakers in parallel
+        all_sources = []
+        for i in range(self.num_spks):
+            # Get the slice for this speaker
+            speaker_slice = masks[i::self.num_spks]   # [B, C, T0] for speaker i
+            
+            # Apply gated output: content * gate
+            content = self.output_heads[i](speaker_slice)
+            gate = self.output_gate_heads[i](speaker_slice)
+            source_out = content * gate
+            source_out = self.activation(source_out)
+            all_sources.append(source_out)
+        
+        # Stack and reshape to final output format
+        sources_stacked = torch.stack(all_sources, dim=0)  # [num_spks, B, C, T0]
+        sources_stacked = sources_stacked.transpose(0, 1)  # [B, num_spks, C, T0]
+        sources_stacked = sources_stacked.transpose(2, 3)  # [B, num_spks, T0, C]
+        
+        # Convert to same format as original output
+        pred1 = sources_stacked[:, 0, :, :]  # [B, T0, C]
+        pred2 = sources_stacked[:, 1, :, :]  # [B, T0, C]
+        
+        return {
+            "pred1": pred1, 
+            "pred2": pred2,
+            # For compatibility, return empty masks and residuals
+            "mask1": torch.zeros_like(pred1),
+            "mask2": torch.zeros_like(pred2),
+            "resid1": torch.zeros_like(pred1),
+            "resid2": torch.zeros_like(pred2),
+        }
 
-        # Masked or maskless fusion
-        if getattr(self.cfg, "use_mask", False):      # prefer reading the flag from cfg
-            # Produce 2*C logits, reshape to [B,T0,C,2], and softmax over the 2 sources
-            logits = self.head_m(h).contiguous()      # [B, T0, 2*C]
-            # Use view with runtime-checked sizes to avoid element-count mismatches
-            logits = logits.view(B, T0, C, 2)
-            m = torch.softmax(logits, dim=-1)         # [B, T0, C, 2]
-            m1, m2 = m[..., 0], m[..., 1]             # each [B, T0, C]
-
-            y1 = m1 * z_mix + r1
-            y2 = m2 * z_mix + r2
-            return {
-                "pred1": y1, "pred2": y2,
-                "mask1": m1, "mask2": m2,
-                "resid1": r1, "resid2": r2,
-            }
-        else:
-            y1 = z_mix + r1
-            y2 = z_mix + r2
-            return {
-                "pred1": y1, "pred2": y2,
-                "resid1": r1, "resid2": r2,
-            }
 # ----------------------- Smoke test -----------------------
 if __name__ == "__main__":
     os.environ.setdefault("RWKV_MY_TESTING", "x070")
     os.environ.setdefault("RWKV_FLOAT_MODE", "bf16")
 
     B, T, C = 2, 320, 128
-    cfg = SeparatorV7Config(in_dim=C, layers=4, head_size_a=64, dir_drop_p=0.3, use_mask=True)
+    cfg = SeparatorV7Config(in_dim=C, layers=4, head_size_a=64, dir_drop_p=0.3, num_spks=2)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = RWKVv7Separator(cfg).to(device)
     x = torch.randn(B, T, C, device=device)
