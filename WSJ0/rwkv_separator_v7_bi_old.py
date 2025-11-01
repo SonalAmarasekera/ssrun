@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 
 from RWKV.RWKV_v7.train_temp.src.model import RWKV_Tmix_x070, RWKV_CMix_x070
+from DAC.dac.nn.layers import Snake1d
 
 # ----------------------- Configs -----------------------
 
@@ -98,14 +99,15 @@ class V7Core(nn.Module):
         return x
 
 class BiV7Core(nn.Module):
-    """Bidirectional wrapper with optional Direction Dropout.
-       If dropped, runs only forward or backward path; otherwise fuses both."""
     def __init__(self, args: V7Args, dir_drop_p: float = 0.0):
         super().__init__()
         self.dir_drop_p = float(dir_drop_p)
         self.fwd = V7Core(args)
         self.bwd = V7Core(args)
-
+        # Learnable fusion weights
+        self.alpha = nn.Parameter(torch.tensor(0.5))
+        self.beta = nn.Parameter(torch.tensor(0.5))
+    
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.training and self.dir_drop_p > 0.0:
             u = torch.rand((), device=x.device)
@@ -115,24 +117,46 @@ class BiV7Core(nn.Module):
                 xb = torch.flip(x, dims=[1]).contiguous()
                 xb = self.bwd(xb)
                 return torch.flip(xb, dims=[1]).contiguous()
-
+        
         xf = self.fwd(x)
         xb = torch.flip(x, dims=[1]).contiguous()
         xb = self.bwd(xb)
         xb = torch.flip(xb, dims=[1]).contiguous()
-        return 0.5 * (xf + xb)
+        
+        # Learnable combination instead of fixed 0.5
+        alpha = torch.sigmoid(self.alpha)
+        beta = torch.sigmoid(self.beta)
+        total = alpha + beta
+        return (alpha * xf + beta * xb) / total
 
 # ------------------------ Heads ------------------------
 
-class SimpleSnake(nn.Module):
-    """Scalar-parameterized Snake for [B,T,C] tensors (matches Codec/DAC-style nonlinearity)."""
-    def __init__(self, alpha: float = 1.0):
+class Snake1dTranspose(nn.Module):
+    """Wrapper that transposes input from [B,T,C] to [B,C,T] for Snake1d"""
+    def __init__(self, channels):
         super().__init__()
-        self.alpha = nn.Parameter(torch.tensor(float(alpha)))
+        self.snake = Snake1d(channels)
+        
+    def forward(self, x):
+        # x: [B, T, C] -> transpose to [B, C, T]
+        x = x.transpose(1, 2)
+        x = self.snake(x)
+        x = x.transpose(1, 2)  # back to [B, T, C]
+        return x
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        a = self.alpha + 1e-9
-        return x + (1.0 / a) * torch.sin(a * x) ** 2
+class ImprovedHead(nn.Module):
+    def __init__(self, in_dim, hidden_dim, out_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.LayerNorm(in_dim),
+            nn.Linear(in_dim, hidden_dim),
+            Snake1dTranspose(hidden_dim),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim, out_dim)
+        )
+    
+    def forward(self, x):
+        return self.net(x)
 
 # ---------------------- Helper --------------------------
 def pad_to_chunk(x, chunk_len=16):
@@ -187,10 +211,10 @@ class RWKVv7Separator(nn.Module):
         self.up = nn.Linear(H, C)
 
         # Heads (residual + mask)
-        head_hidden = max(128, C // 2)
-        act = SimpleSnake(1.0)
-        self.head_r1 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), act, nn.Linear(head_hidden, C))
-        self.head_r2 = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, head_hidden), act, nn.Linear(head_hidden, C))
+        head_hidden = 256
+        #act = SimpleSnake(1.0)
+        self.head_r1 = ImprovedHead(C, head_hidden, C)
+        self.head_r2 = ImprovedHead(C, head_hidden, C)
 
         self.use_mask = bool(cfg.use_mask)
         if self.use_mask:
