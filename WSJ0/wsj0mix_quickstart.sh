@@ -8,10 +8,14 @@ python wsj0mix_kagglehub.py
 # Cloning the needed repos
 git clone https://github.com/mpariente/pywsj0-mix.git
 git clone https://github.com/BlinkDL/RWKV-LM.git
+git clone https://github.com/descriptinc/descript-audio-codec.git
 
 # Required packages
 pip install ninja wandb pandas scipy numpy
 pip install git+https://github.com/descriptinc/descript-audio-codec
+
+#Rename DAC
+mv descript-audio-codec DAC
 
 #Moving to RWKV directory and installing dependencies
 cd RWKV-LM/RWKV-v7/train_temp
