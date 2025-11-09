@@ -141,7 +141,7 @@ def _write_pt(save_path: pathlib.Path, z: torch.Tensor,
     C, T = int(z.shape[0]), int(z.shape[1])
     
     # Calculate actual FPS
-    fps = get_dac_fps(_CODEC, sr)
+    #fps = get_dac_fps(_CODEC, sr)
     
     # Transpose to standard [T, C] format
     z_tc = z.transpose(0, 1).contiguous()  # → [T, C]
@@ -155,7 +155,7 @@ def _write_pt(save_path: pathlib.Path, z: torch.Tensor,
         "T": T,                         # Number of time frames
         "shape_order": "TC",            # Explicit shape order indicator
         "sr": sr,                       # Sample rate of original audio
-        "fps": fps,                     # FIXED: Actual frames per second
+        "fps": 50.00,                     # FIXED: Actual frames per second
         "model_type": model_type,       # DAC model type
         "bitrate": bitrate,             # Bitrate if used
         "n_quantizers": n_quantizers,   # Number of quantizers if specified
@@ -170,7 +170,7 @@ def _write_pt(save_path: pathlib.Path, z: torch.Tensor,
     
     # Log first save for debugging
     if not hasattr(_write_pt, '_logged'):
-        print(f"[DEBUG] First latent saved with shape [T={T}, C={C}], fps={fps:.2f}, stats={stats}")
+        print(f"[DEBUG] First latent saved with shape [T={T}, C={C}], fps={50.00}, stats={stats}")
         _write_pt._logged = True
 
 
