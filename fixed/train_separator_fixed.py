@@ -44,9 +44,9 @@ class FixedHParams:
     """Fixed hyperparameters with better defaults."""
     
     # Data paths
-    train_data: str = "/path/to/latents/train"
-    val_data: str = "/path/to/latents/val"
-    ckpt_dir: str = "./checkpoints"
+    train_data: str = "/workspace/latents/min/train/"
+    val_data: str = "/workspace/latents/min/dev/"
+    ckpt_dir: str = "/workspace/checkpoints"
     
     # Model architecture
     n_layer: int = 8  # Changed from 'layers'
