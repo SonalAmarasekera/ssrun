@@ -46,7 +46,7 @@ except Exception:
 RUN_CUDA = None
 _run_import_err: Optional[str] = None
 try:
-    from rwkv7_cuda_bindings import RUN_CUDA_RWKV7g as RUN_CUDA  # type: ignore
+    from RWKV.RWKV_v7.train_temp.src.model import RUN_CUDA_RWKV7g as RUN_CUDA  # type: ignore
 except Exception as e1:
     try:
         from rwkv7 import RUN_CUDA_RWKV7g as RUN_CUDA  # type: ignore
