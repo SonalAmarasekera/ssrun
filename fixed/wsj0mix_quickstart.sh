@@ -50,6 +50,6 @@ python make_csv.py --root /workspace/2speakers/wav16k/min/tt --out test_min.csv
 #python make_csv.py --root /workspace/2speakers/wav16k/max/tt --out test_max.csv
 
 # Connecting the latent generating files
-chmod +x gen_latents.sh
+chmod +x gen_latents_fixed.sh
 
-./gen_latents.sh
+./gen_latents_fixed.sh
