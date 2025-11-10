@@ -30,3 +30,7 @@ First install *tensorboard* and *tensorflow* \
 In remote terminal 2 --> tensorboard --logdir=runs/rwkv_separator --port=6007 \
 In local terminal --> ssh -p 43381 root@209.226.130.26 -L 6007:localhost:6007 (change this per the remote server)\
 In local browser --> http://localhost:6007
+
+Also used this to write and inspect a log---- \
+python train_separator_fixed.py 2>&1 | tee training.log \
+tail -f training.log *or* tail -f training.log | grep -E "Epoch|val_loss|Saved"
