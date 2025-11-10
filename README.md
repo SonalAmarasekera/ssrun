@@ -26,7 +26,7 @@ export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH  \
 export CPATH=$CUDA_HOME/include:$CPATH
 
 Tensorboard command---- \
-First install *tensorboard* and *tensorflow* \
+First install *tensorboard* and *tensorflow* --> pip install tensorflow tensorboard \
 In remote terminal 2 --> tensorboard --logdir=runs/rwkv_separator --port=6007 \
 In local terminal --> ssh -p 43381 root@209.226.130.26 -L 6007:localhost:6007 (change this per the remote server)\
 In local browser --> http://localhost:6007
