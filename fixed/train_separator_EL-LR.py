@@ -600,7 +600,7 @@ def main():
     model = model.to(hp.device)
     
     # Wrap model
-    model = RWKVSeparatorWrapper(model, num_sources=hp.num_sources)
+    model = RWKVSeparatorWrapper(model)
     
     # Test model output
     if not test_model_output(model, hp):
