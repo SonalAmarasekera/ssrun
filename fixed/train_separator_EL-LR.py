@@ -65,20 +65,20 @@ class FixedHParams:
     lr: float = 5e-5  # Lower initial LR
     lr_warmup_steps: int = 1000
     lr_min: float = 1e-7
-    weight_decay: float = 0.01
+    weight_decay: float = 0.1
     grad_clip: float = 0.5  # More aggressive clipping
     
     # Loss configuration
-    lambda_residual_l2: float = 1e-4
+    lambda_residual_l2: float = 0.01
     lambda_mask_entropy: float = 0.0
     mse_scale: float = 0.1  # Scale MSE for stability
     
     # ============================================
     # NEW: Embedding Loss (CodecFormer-EL) Parameters
     # ============================================
-    use_embedding_loss: bool = False  # Enable/disable embedding loss
+    use_embedding_loss: bool = True  # Enable/disable embedding loss
     el_mode: str = "latent"  # 'none' | 'latent' | 'decoder'
-    lambda_el: float = 0.1  # Weight for embedding loss (0.0 to disable)
+    lambda_el: float = 0.5  # Weight for embedding loss (0.0 to disable)
     el_cosine: bool = True  # Use cosine similarity (True) or MSE (False)
     # Note: latent_teacher, decode_fn, embed_fn are set to None by default
     # The 'latent' mode with latent_teacher=None uses identity projection (fallback)
