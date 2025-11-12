@@ -531,13 +531,7 @@ def evaluate(
 def main():
     # Create hyperparameters
     hp = FixedHParams()
-    
-    # You can override parameters here or via command line
-    # Example: Enable embedding loss
-    hp.use_embedding_loss = True  # Set to True to enable
-    hp.lambda_el = 0.1  # Weight for embedding loss
-    hp.el_mode = "latent"  # Use latent-space embedding loss
-    
+        
     print("\n" + "="*60)
     print("RWKV Separator Training with Embedding Loss Support")
     print("="*60)
