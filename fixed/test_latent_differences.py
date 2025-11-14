@@ -4,6 +4,9 @@ test_latent_differences.py
 
 Test script to verify that latent files with the same name across
 mix_clean, s1, and s2 directories have different content.
+
+Quick: python test_latent_differences.py --latent_dir ./latents --quick --num_samples 20
+Detailed: python test_latent_differences.py --latent_dir ./latents --num_samples 15
 """
 
 import argparse
@@ -297,4 +300,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
