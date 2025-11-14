@@ -55,6 +55,6 @@ chmod +x gen_latents_fixed.sh
 ./gen_latents_fixed.sh
 
 # Check files for similarity
-python test_latent_differences.py --latent_dir ./latents --quick --num_samples 20
-python test_latent_differences.py --latent_dir ./latents --quick --num_samples 20
-python test_latent_differences.py --latent_dir ./latents --quick --num_samples 20
+python test_latent_differences.py --latent_dir /workspace/latents/min/train --quick --num_samples 20
+python test_latent_differences.py --latent_dir /workspace/latents/min/dev --quick --num_samples 20
+python test_latent_differences.py --latent_dir /workspace/latents/min/test --quick --num_samples 20
