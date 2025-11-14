@@ -11,7 +11,7 @@ git clone https://github.com/BlinkDL/RWKV-LM.git
 git clone https://github.com/descriptinc/descript-audio-codec.git
 
 # Required packages
-pip install ninja wandb pandas scipy numpy tensorboard
+pip install ninja wandb pandas scipy numpy tensorboard seaborn
 pip install git+https://github.com/descriptinc/descript-audio-codec
 
 #Rename DAC
