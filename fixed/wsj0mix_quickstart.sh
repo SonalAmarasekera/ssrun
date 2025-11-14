@@ -53,3 +53,8 @@ python make_csv.py --root /workspace/2speakers/wav16k/min/tt --out test_min.csv
 chmod +x gen_latents_fixed.sh
 
 ./gen_latents_fixed.sh
+
+# Check files for similarity
+python test_latent_differences.py --latent_dir ./latents --quick --num_samples 20
+python test_latent_differences.py --latent_dir ./latents --quick --num_samples 20
+python test_latent_differences.py --latent_dir ./latents --quick --num_samples 20
