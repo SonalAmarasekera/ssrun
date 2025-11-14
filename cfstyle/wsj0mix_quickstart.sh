@@ -9,6 +9,7 @@ python wsj0mix_kagglehub.py
 git clone https://github.com/mpariente/pywsj0-mix.git
 git clone https://github.com/BlinkDL/RWKV-LM.git
 git clone https://github.com/descriptinc/descript-audio-codec.git
+git clone https://github.com/Yip-Jia-Qi/codecformer.git
 
 # Required packages
 pip install ninja wandb pandas scipy numpy tensorboard seaborn
