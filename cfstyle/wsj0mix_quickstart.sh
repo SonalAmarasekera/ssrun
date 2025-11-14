@@ -48,13 +48,3 @@ python make_csv.py --root /workspace/2speakers/wav16k/min/tt --out test_min.csv
 #python make_csv.py --root /workspace/2speakers/wav16k/max/tr --out train_max.csv
 #python make_csv.py --root /workspace/2speakers/wav16k/max/cv --out dev_max.csv
 #python make_csv.py --root /workspace/2speakers/wav16k/max/tt --out test_max.csv
-
-# Connecting the latent generating files
-chmod +x gen_latents_fixed.sh
-
-./gen_latents_fixed.sh
-
-# Check files for similarity
-python test_latent_differences.py --latent_dir /workspace/latents/min/train --quick --num_samples 20000
-python test_latent_differences.py --latent_dir /workspace/latents/min/dev --quick --num_samples 5000
-python test_latent_differences.py --latent_dir /workspace/latents/min/test --quick --num_samples 3000
