@@ -31,7 +31,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import torchaudio
 
-from codecformer3 import DACWrapper   # make sure this is importable
+from codecformer.codecformer3 import DACWrapper   # make sure this is importable
 from rwkv_separator_Claudemod import build_rwkv7_separator  # your RWKV v7 separator
 
 
