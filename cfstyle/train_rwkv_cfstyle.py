@@ -98,15 +98,40 @@ class Wsj02MixDataset(Dataset):
 
 def collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Collate into:
-      mix:      [B, 1, T]
-      sources:  [B, S, 1, T]
-    Assumes all items in batch have same T (true for fixed-length segments).
-    """
-    mix = torch.stack([b["mix"] for b in batch], dim=0)          # [B, 1, T]
-    sources = torch.stack([b["sources"] for b in batch], dim=0)  # [B, S, 1, T]
-    return mix, sources
+    Pad all examples in the batch to the max time length.
 
+    Returns:
+      mix:     [B, 1, T_max]
+      sources: [B, S, 1, T_max]
+    """
+    # batch[i]["mix"] : [1, T_i]
+    # batch[i]["sources"] : [S, 1, T_i]
+
+    # 1) find max length in this batch
+    lengths = [b["mix"].shape[-1] for b in batch]
+    T_max = max(lengths)
+
+    mix_list = []
+    sources_list = []
+
+    for b in batch:
+        mix = b["mix"]         # [1, T]
+        sources = b["sources"] # [S, 1, T]
+        T = mix.shape[-1]
+        pad_T = T_max - T
+
+        if pad_T > 0:
+            # pad last dimension (time) on the right
+            mix = F.pad(mix, (0, pad_T))                 # [1, T_max]
+            sources = F.pad(sources, (0, pad_T))         # [S, 1, T_max]
+
+        mix_list.append(mix)
+        sources_list.append(sources)
+
+    mix = torch.stack(mix_list, dim=0)          # [B, 1, T_max]
+    sources = torch.stack(sources_list, dim=0)  # [B, S, 1, T_max]
+
+    return mix, sources
 
 # =========================
 #   SI-SDR + PIT
