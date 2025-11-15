@@ -32,6 +32,14 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import torchaudio
 
+# --- RWKV v7 CUDA settings (must be set before importing RWKV model) ---
+os.environ.setdefault("RWKV_JIT_ON", "1")
+os.environ.setdefault("RWKV_CUDA_ON", "1")
+os.environ.setdefault("RWKV_MY_TESTING", "x070")
+os.environ.setdefault("RWKV_FLOAT_MODE", "bf16")
+os.environ.setdefault("RWKV_HEAD_SIZE_A", "64")
+# -----------------------------------------------------------------------
+
 from codecformer.codecformer3 import DACWrapper   # make sure this is importable
 from rwkv_separator_Claudemod import build_rwkv7_separator  # your RWKV v7 separator
 
