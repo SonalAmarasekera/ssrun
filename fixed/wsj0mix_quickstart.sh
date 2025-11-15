@@ -2,15 +2,18 @@
 set -e
 
 # WSJ0 root data download and move
+echo "Downloading dataset root folders..."
 pip install kagglehub
 python wsj0mix_kagglehub.py
 
 # Cloning the needed repos
+echo "Cloning necessary repos..."
 git clone https://github.com/mpariente/pywsj0-mix.git
 git clone https://github.com/BlinkDL/RWKV-LM.git
 git clone https://github.com/descriptinc/descript-audio-codec.git
 
 # Required packages
+echo "Installing required packages..."
 pip install ninja wandb pandas scipy numpy tensorboard seaborn
 pip install git+https://github.com/descriptinc/descript-audio-codec
 
@@ -35,26 +38,21 @@ cp -r RWKV/RWKV_v7/train_temp/cuda .
 cd pywsj0-mix/
 
 echo "Starting data creation..."
+
 # Generate data for 2 speakers at 8k
 python generate_wsjmix.py -p /root/.cache/kagglehub/datasets/sonishmaharjan555/wsj0-2mix/versions/2/ -o /workspace/ -n 2 -sr 16000 --len_mode min
 
 cd ../
 
-# Mapping the CSVs
-python make_csv.py --root /workspace/2speakers/wav16k/min/tr --out train_min.csv
-python make_csv.py --root /workspace/2speakers/wav16k/min/cv --out dev_min.csv
-python make_csv.py --root /workspace/2speakers/wav16k/min/tt --out test_min.csv
+# Generating latents
+echo "Generating latents (.dac)..."
+python fixed_dac_encoder.py /content/2speakers/wav16k/min/ --output /content/latents/ --model_type "16khz" --batch_size 10 --device "cuda"
 
-#python make_csv.py --root /workspace/2speakers/wav16k/max/tr --out train_max.csv
-#python make_csv.py --root /workspace/2speakers/wav16k/max/cv --out dev_max.csv
-#python make_csv.py --root /workspace/2speakers/wav16k/max/tt --out test_max.csv
-
-# Connecting the latent generating files
-chmod +x gen_latents_fixed.sh
-
-./gen_latents_fixed.sh
+# Renaming for easier access
+mv 
 
 # Check files for similarity
+echo "Checking similarity..."
 python test_latent_differences.py --latent_dir /workspace/latents/min/train --quick --num_samples 20000
 python test_latent_differences.py --latent_dir /workspace/latents/min/dev --quick --num_samples 5000
 python test_latent_differences.py --latent_dir /workspace/latents/min/test --quick --num_samples 3000
