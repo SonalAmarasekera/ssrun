@@ -337,7 +337,7 @@ class Block(nn.Module):
         self.tmix = BiTimeMixFull(n_embd, n_layer, layer_id, head_size_a)
         self.cmix = Full_CMix(n_embd, n_layer, layer_id)
         self.bf16 = bf16
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(SeparatorV7Config.dropout)
         if layer_id == 0:
             self.ln0 = nn.LayerNorm(n_embd)
             
