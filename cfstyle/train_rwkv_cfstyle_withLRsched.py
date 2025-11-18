@@ -228,12 +228,12 @@ def pit_si_sdr_loss(est_sources: torch.Tensor,
     # permutation 1: (est1→s1, est2→s2)
     sdr11 = si_sdr(est1, s1)  # [B]
     sdr22 = si_sdr(est2, s2)  # [B]
-    loss_perm1 = -0.5 * (sdr11 + sdr22)  # [B]
+    loss_perm1 = -(sdr11 + sdr22)  # [B]
 
     # permutation 2: (est1→s2, est2→s1)
     sdr12 = si_sdr(est1, s2)
     sdr21 = si_sdr(est2, s1)
-    loss_perm2 = -0.5 * (sdr12 + sdr21)  # [B]
+    loss_perm2 = -(sdr12 + sdr21)  # [B]
 
     # take the better (lower loss ⇒ higher SI-SDR)
     loss = torch.minimum(loss_perm1, loss_perm2)
@@ -572,3 +572,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
