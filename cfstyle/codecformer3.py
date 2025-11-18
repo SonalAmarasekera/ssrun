@@ -14,8 +14,6 @@ import random
 import numpy as np
 from torch.nn.utils import weight_norm
 from dac.nn.layers import Snake1d
-from speechbrain.lobes.models.transformer.Transformer import TransformerDecoder
-from speechbrain.lobes.models.transformer.Transformer import PositionalEncoding
 
 class DACWrapper():
     '''
