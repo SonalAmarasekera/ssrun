@@ -295,10 +295,26 @@ def train_one_epoch(
 
         # Stack to [B, S, T]
         est_sources = torch.stack(est_wavs, dim=1).squeeze(2)  # [B, S, T]
-        true_sources = sources.squeeze(2)                      # [B, S, T]
+
+        # ----------------- Normal SI-SDR -----------------------
+        #true_sources = sources.squeeze(2)                      # [B, S, T]
+        # -------------------------------------------------------
+        
+        # ------------------ Codec SI-SDR -----------------------
+        # sources: [B, S, 1, T] -> [B*S, 1, T]
+        B, S, _, T = sources.shape
+        sources_flat = sources.view(B * S, 1, T)
+
+        with torch.no_grad():
+            src_enc, src_orig_len = dac.get_encoded_features(sources_flat)   # [B*S, C_lat, T_lat], [B*S]
+            src_q, _, _, _, _ = dac.get_quantized_features(src_enc)         # [B*S, C_lat, T_lat]
+            codec_src_flat = dac.get_decoded_signal(src_q, src_orig_len)    # [B*S, 1, T]
+
+        codec_sources = codec_src_flat.view(B, S, T)  # [B, S, T]
 
         # ---------- PIT SI-SDR loss in waveform space ----------
-        loss = pit_si_sdr_loss(est_sources, true_sources)
+        #loss = pit_si_sdr_loss(est_sources, true_sources)
+        loss = pit_si_sdr_loss(est_sources, codec_sources)
 
         loss.backward()
         if grad_clip is not None and grad_clip > 0:
@@ -347,9 +363,26 @@ def validate(
             est_wavs.append(wav_hat)
 
         est_sources = torch.stack(est_wavs, dim=1).squeeze(2)  # [B,S,T]
-        true_sources = sources.squeeze(2)                      # [B,S,T]
+        
+        # ---------------- Normal SI-SDR --------------------
+        #true_sources = sources.squeeze(2)                      # [B,S,T]
+        #loss = pit_si_sdr_loss(est_sources, true_sources)
+        # ---------------------------------------------------
+        # ----------------- Codec SI-SDR --------------------
+        # ----- Build Codec-distorted references t = Codec(s) -----
+        B, S, _, T = sources.shape
+        sources_flat = sources.view(B * S, 1, T)
 
-        loss = pit_si_sdr_loss(est_sources, true_sources)
+        with torch.no_grad():
+            src_enc, src_orig_len = dac.get_encoded_features(sources_flat)   # [B*S, C_lat, T_lat], [B*S]
+            src_q, _, _, _, _ = dac.get_quantized_features(src_enc)         # [B*S, C_lat, T_lat]
+            codec_src_flat = dac.get_decoded_signal(src_q, src_orig_len)    # [B*S, 1, T]
+
+        codec_sources = codec_src_flat.view(B, S, T)  # [B, S, T]
+
+        loss = pit_si_sdr_loss(est_sources, codec_sources)
+        # ---------------------------------------------------
+        
         total_loss += float(loss.item())
         num_batches += 1
 
@@ -572,4 +605,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
