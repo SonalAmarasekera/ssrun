@@ -11,6 +11,8 @@ Pipeline:
     → waveforms hat_s1, hat_s2
     → PIT SI-SDR loss in waveform domain
 
+python train_rwkv_cfstyle_withLRsched.py --train_csv train_min.csv --valid_csv dev_min.csv --sample_rate 16000 --epochs 50 --device "cuda" --head_mode "mask" --lr_schedule --early_stop --n_layer 8 --batch_size 16
+
 Dependencies:
   - torch
   - torchaudio
@@ -416,8 +418,8 @@ def main():
                     help="RWKV separation head mode.")
 
     # ---- TensorBoard-related hyperparams ----
-    ap.add_argument("--log_dir", type=str, default=None,
-                    help="TensorBoard log directory (default: save_dir/tb).")
+    ap.add_argument("--log_dir", type=str, default="/workspace/checkpoints_rwkv_dac/tb",
+                    help="TensorBoard log directory")
     ap.add_argument("--log_hparams", action="store_true",
                     help="Log hyperparameters once at the beginning.")
 
@@ -605,5 +607,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
