@@ -1,3 +1,4 @@
+# Move this script to descript-audio-codec/dac/utils before executing
 import argparse
 import torch
 import matplotlib.pyplot as plt
@@ -181,4 +182,5 @@ if __name__ == "__main__":
     parser.add_argument("--win_duration", type=float, default=5.0, help="Window duration for chunking")
     
     args = parser.parse_args()
+
     analyze(args)
