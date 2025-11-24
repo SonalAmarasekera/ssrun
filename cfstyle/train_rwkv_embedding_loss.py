@@ -40,8 +40,7 @@ os.environ.setdefault("RWKV_FLOAT_MODE", "bf16")
 os.environ.setdefault("RWKV_HEAD_SIZE_A", "64")
 
 # IMPORT YOUR MODEL HERE
-# Ensure rwkv_separator_grouped.py is in the same folder
-from rwkv_separator_grouped import build_rwkv7_separator 
+from rwkv_separator_Gemini import build_rwkv7_separator
 from codecformer3 import DACWrapper
 
 # =========================
@@ -366,4 +365,5 @@ def main():
             }, os.path.join(args.save_dir, "best_model.pt"))
 
 if __name__ == "__main__":
+
     main()
